@@ -26719,6 +26719,15 @@ let sErr = {
     color: 'red',
     padding: 20,
 };
+let sButton = {
+    border: 'none',
+    borderBottom: '3px solid #aaa',
+    padding: '5px 15px',
+    background: 'white',
+    marginLeft: 20,
+    borderRadius: 10,
+    float: 'right',
+};
 class AppView extends React.Component {
     constructor(props) {
         super(props);
@@ -26729,6 +26738,7 @@ class AppView extends React.Component {
             rule: 'start',
             err: null,
             showWrappers: false,
+            autoUpdate: true,
         };
     }
     componentDidMount() {
@@ -26736,12 +26746,21 @@ class AppView extends React.Component {
     }
     setSource(s) {
         this.setState({ source: s }, () => {
-            this.go();
+            if (this.state.autoUpdate) {
+                this.go();
+            }
         });
     }
     setShowWrappers(val) {
         this.setState({ showWrappers: val }, () => {
             this.go();
+        });
+    }
+    setAutoUpdate(val) {
+        this.setState({ autoUpdate: val }, () => {
+            if (val) {
+                this.go();
+            }
         });
     }
     go() {
@@ -26762,7 +26781,12 @@ class AppView extends React.Component {
         return React.createElement("div", null,
             React.createElement("div", { style: sLeftHalf },
                 React.createElement("h3", null, "Filigree online editor"),
-                React.createElement("h4", null, "Source"),
+                React.createElement("h4", null,
+                    "Source \u00A0 \u00A0",
+                    React.createElement("label", { style: { fontWeight: 'normal' } },
+                        React.createElement("input", { type: "checkbox", checked: this.state.autoUpdate, onChange: (e) => this.setAutoUpdate(e.target.checked) }),
+                        "Auto-update"),
+                    React.createElement("button", { style: sButton, type: "button", onClick: () => this.go() }, "Update \u2192")),
                 React.createElement("div", { style: sErr }, this.state.err),
                 React.createElement("textarea", { style: sTextarea, value: this.state.source, onChange: e => this.setSource(e.target.value) })),
             React.createElement("div", { style: sRightHalf },
@@ -26772,7 +26796,7 @@ class AppView extends React.Component {
                     "Output of \"",
                     this.state.rule,
                     "\" rule \u00A0 \u00A0",
-                    React.createElement("label", null,
+                    React.createElement("label", { style: { fontWeight: 'normal' } },
                         React.createElement("input", { type: "checkbox", checked: this.state.showWrappers, onChange: (e) => this.setShowWrappers(e.target.checked) }),
                         "Show structure")),
                 React.createElement("div", { style: sOutputContainer }, this.state.outputs.map((output, ii) => React.createElement("div", { style: sOutput, key: ii, dangerouslySetInnerHTML: { __html: output } })))));

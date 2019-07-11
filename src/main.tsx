@@ -57,6 +57,15 @@ let sErr : CSSProperties = {
     color: 'red',
     padding: 20,
 }
+let sButton : CSSProperties = {
+    border: 'none',
+    borderBottom: '3px solid #aaa',
+    padding: '5px 15px',
+    background: 'white',
+    marginLeft: 20,
+    borderRadius: 10,
+    float: 'right',
+}
 
 interface AppViewProps extends React.Props<any> { }
 interface AppViewState {
@@ -66,6 +75,7 @@ interface AppViewState {
     rule : string;
     err : string | null;
     showWrappers : boolean;
+    autoUpdate : boolean;
 }
 
 class AppView extends React.Component<AppViewProps, AppViewState> {
@@ -78,6 +88,7 @@ class AppView extends React.Component<AppViewProps, AppViewState> {
             rule: 'start',
             err: null,
             showWrappers: false,
+            autoUpdate: true,
         };
     }
     componentDidMount() { 
@@ -85,12 +96,17 @@ class AppView extends React.Component<AppViewProps, AppViewState> {
     }
     setSource(s : string) {
         this.setState({source: s}, () => {
-            this.go();
+            if (this.state.autoUpdate) { this.go(); }
         });
     }
     setShowWrappers(val : boolean) {
         this.setState({showWrappers: val}, () => {
             this.go();
+        });
+    }
+    setAutoUpdate(val : boolean) {
+        this.setState({autoUpdate: val}, () => {
+            if (val) { this.go(); }
         });
     }
     go() {
@@ -115,7 +131,18 @@ class AppView extends React.Component<AppViewProps, AppViewState> {
         return <div>
             <div style={sLeftHalf}>
                 <h3>Filigree online editor</h3>
-                <h4>Source</h4>
+                <h4>
+                    Source
+                    &nbsp; &nbsp;
+                    <label style={{fontWeight: 'normal'}}>
+                        <input type="checkbox"
+                            checked={this.state.autoUpdate}
+                            onChange={(e) => this.setAutoUpdate(e.target.checked)}
+                            />
+                        Auto-update
+                    </label>
+                    <button style={sButton} type="button" onClick={() => this.go()}>Update &rarr;</button>
+                </h4>
                 <div style={sErr}>
                     {this.state.err}
                 </div>
@@ -131,7 +158,7 @@ class AppView extends React.Component<AppViewProps, AppViewState> {
                 <h4>
                     Output of "{this.state.rule}" rule
                     &nbsp; &nbsp;
-                    <label>
+                    <label style={{fontWeight: 'normal'}}>
                         <input type="checkbox"
                             checked={this.state.showWrappers}
                             onChange={(e) => this.setShowWrappers(e.target.checked)}

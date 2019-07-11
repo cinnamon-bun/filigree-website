@@ -6,4 +6,4 @@ Refer to the [Filigree documentation over here.](https://github.com/cinnamon-bun
 
 Try it at https://cinnamon-bun.github.io/filigree-website/
 
-![](screenshot.png)
+![](screenshot2.png)

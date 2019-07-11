@@ -25135,14 +25135,73 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const React = __importStar(require("react"));
 const ReactDOM = __importStar(require("react-dom"));
+let sLeftHalf = {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: '50%',
+    padding: 20,
+    background: '#ddd',
+};
+let sRightHalf = {
+    position: 'fixed',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: '50%',
+    padding: 20,
+    background: '#ddd',
+};
+let sTextarea = {
+    width: '100%',
+    height: '90%',
+    fontFamily: 'monospace',
+    background: '#fff',
+    borderRadius: 10,
+    border: 'none',
+    padding: 10,
+};
+let sOutputContainer = {
+    background: '#fff',
+    borderRadius: 10,
+};
+let sOutput = {
+    padding: 20,
+    borderBottom: '1px solid #ddd',
+};
 class AppView extends React.Component {
-    constructor(props) { super(props); }
-    componentDidMount() {
+    constructor(props) {
+        super(props);
+        this.state = {
+            source: 'foo = bar',
+            outputs: [],
+            n: 5,
+        };
     }
-    componentWillUnmount() {
+    componentDidMount() {
+        this.go();
+    }
+    setSource(e) {
+        this.setState({ source: e.target.value }, () => {
+            this.go();
+        });
+    }
+    go() {
+        let outputs = [];
+        for (let ii = 0; ii < this.state.n; ii++) {
+            outputs.push(this.state.source);
+        }
+        this.setState({ outputs: outputs });
     }
     render() {
-        return React.createElement("div", null, "Hello from React");
+        return React.createElement("div", null,
+            React.createElement("div", { style: sLeftHalf },
+                React.createElement("h4", null, "Source"),
+                React.createElement("textarea", { style: sTextarea, value: this.state.source, onChange: e => this.setSource(e) })),
+            React.createElement("div", { style: sRightHalf },
+                React.createElement("h4", null, "Output"),
+                React.createElement("div", { style: sOutputContainer }, this.state.outputs.map((s, ii) => React.createElement("div", { style: sOutput, key: ii }, s)))));
     }
 }
 ReactDOM.render(React.createElement(AppView, null), document.getElementById('react-slot'));

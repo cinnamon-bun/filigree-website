@@ -1,4 +1,1353 @@
 (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result["default"] = mod;
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const nearley_1 = __importDefault(require("nearley"));
+const titlecase_1 = __importDefault(require("titlecase"));
+const filigreeGrammar = __importStar(require("./filigreeGrammar"));
+let choose = (items) => items[Math.floor(Math.random() * items.length)];
+let dedupeStrings = (arr) => {
+    // given an array of strings, return a new array with duplicates removed
+    let obj = {};
+    for (let item of arr) {
+        obj[item] = true;
+    }
+    return Object.keys(obj);
+};
+let flatten = (arr) => {
+    let result = [];
+    for (let item of arr) {
+        if (Array.isArray(item)) {
+            result = result.concat(flatten(item));
+        }
+        else {
+            result.push(item);
+        }
+    }
+    return result;
+};
+// Given a raw FExpr object, clean it up and remove redundant parts
+let optimize = (expr) => {
+    // recurse to children
+    if (expr.kind === 'seq' || expr.kind === 'choose') {
+        expr.children = expr.children.map(optimize);
+    }
+    // TODO: if seq has empty literals, remove them
+    // if seq or choose has only one child, return that child instead
+    if ((expr.kind === 'seq' || expr.kind === 'choose') && expr.children.length === 1) {
+        return expr.children[0];
+    }
+    // convert seq or choose with no children into an empty literal
+    if ((expr.kind === 'seq' || expr.kind === 'choose') && expr.children.length === 0) {
+        return {
+            kind: 'literal',
+            text: '',
+        };
+    }
+    return expr;
+};
+let makeModifiers = () => ({
+    s: (input) => input + 's',
+    a: (input) => 'a ' + input,
+    ed: (input) => input + 'ed',
+    uppercase: (input) => input.toUpperCase(),
+    lowercase: (input) => input.toLowerCase(),
+    inception: (input) => input.toUpperCase().split('').join(' '),
+    titlecase: (input) => titlecase_1.default(input),
+    trim: (input) => input.trim(),
+    collapseWhitespace: (input) => input,
+    wackycase: (input) => {
+        // "hello" -> "hElLo"
+        let result = [];
+        for (let ii = 0; ii < input.length; ii++) {
+            if (ii % 2 === 0) {
+                result.push(input[ii].toLowerCase());
+            }
+            else {
+                result.push(input[ii].toUpperCase());
+            }
+        }
+        return result.join('');
+    },
+});
+class Filigree {
+    // Create a Filigree generator (a set of rules) from a Filigree-language source file.
+    // source is a string of rules in Filigree format
+    // If parsing fails, no error will be thrown, but this.err will become non-null
+    // (and will contain an error message about what's wrong with the Filigree-language input).
+    constructor(source) {
+        this.rules = {};
+        this.err = null;
+        this.modifiers = makeModifiers();
+        let parser = new nearley_1.default.Parser(nearley_1.default.Grammar.fromCompiled(filigreeGrammar));
+        try {
+            // add '\n' to ensure a comment on the last line lexes correctly
+            let decls = parser.feed(source + '\n').results[0];
+            for (let decl of decls) {
+                this.rules[decl.name] = decl.value;
+            }
+            // TODO: warn if a rule is declared twice
+        }
+        catch (e) {
+            this.err = e;
+        }
+        for (let name of this.ruleNames()) {
+            this.rules[name] = optimize(this.rules[name]);
+        }
+    }
+    ruleNames() {
+        return Object.keys(this.rules);
+    }
+    refsInRule(ruleName) {
+        // return a list of the rules referenced by the given rule
+        let refsInExpr = (expr) => {
+            if (expr.kind === 'ref') {
+                return [expr.name];
+            }
+            else if (expr.kind === 'seq' || expr.kind === 'choose') {
+                return dedupeStrings(flatten(expr.children.map(refsInExpr)));
+            }
+            else {
+                return [];
+            }
+        };
+        return refsInExpr(this.rules[ruleName]);
+    }
+    // Generate text from a rule.
+    // name is a rule name
+    generate(name) {
+        if (this.rules[name] === undefined) {
+            return '<' + name + '>'; // name not found
+        }
+        return this._evalFExpr(this.rules[name]);
+    }
+    // Evaluate a Filigree expression object
+    _evalFExpr(expr) {
+        let result = '????';
+        if (expr.kind == 'seq') {
+            result = expr.children.map(ch => this._evalFExpr(ch)).join('');
+        }
+        else if (expr.kind === 'ref') {
+            let x = this.rules[expr.name];
+            if (x === undefined) {
+                return '<' + expr.name + '>'; // rule name not found
+            }
+            else {
+                // TODO: test for stack overflow
+                // TODO: warn on bad modifier name
+                result = this._evalFExpr(x);
+                for (let modName of expr.mods) {
+                    let modFn = this.modifiers[modName] || ((x) => x);
+                    result = modFn(result);
+                }
+            }
+        }
+        else if (expr.kind == 'choose') {
+            // TODO: determinism
+            // TODO: move the most recent item to the end of the list of children
+            result = this._evalFExpr(choose(expr.children));
+        }
+        else if (expr.kind === 'literal') {
+            result = expr.text;
+        }
+        // TODO: allow wrapping the result in tags
+        //return `<div class="expr">${result}</div>`;
+        return result;
+    }
+    // Convert this set of Filigree rules back into Filigree language.
+    toString() {
+        return this._renderRules(this._toStringFExpr.bind(this));
+    }
+    // Show this set of Filigree rules in a debugging format
+    repr() {
+        return this._renderRules(this._reprFExpr.bind(this));
+    }
+    _renderRules(fn) {
+        let result = [];
+        for (let name of this.ruleNames()) {
+            result.push(name + ' = ' + fn(this.rules[name]));
+        }
+        return result.join('\n');
+    }
+    // Convert back into filigree source code
+    _toStringFExpr(expr) {
+        let result = '????';
+        if (expr.kind == 'seq') {
+            result = expr.children.map(ch => this._toStringFExpr(ch)).join('');
+        }
+        else if (expr.kind === 'ref') {
+            let mods = expr.mods.join('.');
+            if (mods) {
+                mods = '.' + mods;
+            }
+            result = '<' + expr.name + mods + '>';
+        }
+        else if (expr.kind == 'choose') {
+            result = '[' + expr.children.map(ch => this._toStringFExpr(ch)).join('/') + ']';
+        }
+        else if (expr.kind === 'literal') {
+            result = expr.text;
+        }
+        return result;
+    }
+    // Convert back into filigree source code but with extra notation to help understand the parsing
+    _reprFExpr(expr) {
+        let result = '????';
+        if (expr.kind == 'seq') {
+            result = '(' + expr.children.map(ch => this._reprFExpr(ch)).join('+') + ')';
+        }
+        else if (expr.kind === 'ref') {
+            let mods = expr.mods.join('.');
+            if (mods) {
+                mods = '.' + mods;
+            }
+            result = '<' + expr.name + mods + '>';
+        }
+        else if (expr.kind == 'choose') {
+            result = '[' + expr.children.map(ch => this._reprFExpr(ch)).join('/') + ']';
+        }
+        else if (expr.kind === 'literal') {
+            result = '"' + expr.text + '"';
+        }
+        return result;
+    }
+}
+exports.Filigree = Filigree;
+
+},{"./filigreeGrammar":2,"nearley":4,"titlecase":24}],2:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+// Generated automatically by nearley, version 2.16.0
+// http://github.com/Hardmath123/nearley
+// Bypasses TS6133. Allow declared but unused functions.
+// @ts-ignore
+function id(d) { return d[0]; }
+let moo = require('moo');
+let lexer = moo.compile({
+    ruleName: /[a-zA-Z0-9_-]+/,
+    eq: " = ",
+    lbrak: "[",
+    rbrak: "]",
+    lang: "<",
+    rang: ">",
+    or: "/",
+    dot: ".",
+    // ignorable noise between lines:
+    // optional whitespace
+    // optional comment to the end of the line (starting with "#")
+    // a required newline
+    // optional whitespace starting the next line
+    // This assumes the string ends in a newline!  You must ensure that's the case
+    // (The Filigree class adds a newline at the end for you)
+    nl: { match: /[ \t]*(?:#[^\n]*)?\n[ \t]*/, lineBreaks: true },
+    // general string characters
+    nonControlChars: /[^[/\]<.>=\n]/,
+});
+let flatten = (arr) => {
+    let result = [];
+    for (let item of arr) {
+        if (Array.isArray(item)) {
+            result = result.concat(flatten(item));
+        }
+        else {
+            result.push(item);
+        }
+    }
+    return result;
+};
+;
+;
+;
+exports.Lexer = lexer;
+exports.ParserRules = [
+    { "name": "ruleDecls$ebnf$1", "symbols": [] },
+    { "name": "ruleDecls$ebnf$1", "symbols": ["ruleDecls$ebnf$1", (lexer.has("nl") ? { type: "nl" } : nl)], "postprocess": (d) => d[0].concat([d[1]]) },
+    { "name": "ruleDecls$ebnf$2", "symbols": [] },
+    { "name": "ruleDecls$ebnf$2$subexpression$1$ebnf$1", "symbols": [] },
+    { "name": "ruleDecls$ebnf$2$subexpression$1$ebnf$1", "symbols": ["ruleDecls$ebnf$2$subexpression$1$ebnf$1", (lexer.has("nl") ? { type: "nl" } : nl)], "postprocess": (d) => d[0].concat([d[1]]) },
+    { "name": "ruleDecls$ebnf$2$subexpression$1", "symbols": ["ruleDecl", "ruleDecls$ebnf$2$subexpression$1$ebnf$1"] },
+    { "name": "ruleDecls$ebnf$2", "symbols": ["ruleDecls$ebnf$2", "ruleDecls$ebnf$2$subexpression$1"], "postprocess": (d) => d[0].concat([d[1]]) },
+    { "name": "ruleDecls", "symbols": ["ruleDecls$ebnf$1", "ruleDecls$ebnf$2"], "postprocess": ([nl, pairs]) => {
+            return flatten(pairs).filter((x) => x.type !== 'nl');
+        } },
+    { "name": "ruleDecl", "symbols": [(lexer.has("ruleName") ? { type: "ruleName" } : ruleName), { "literal": " = " }, "seq"], "postprocess": ([ruleName, _, seq]) => ({
+            kind: 'decl',
+            name: ruleName.value,
+            value: seq,
+        }) },
+    { "name": "seq$ebnf$1", "symbols": ["literal"], "postprocess": id },
+    { "name": "seq$ebnf$1", "symbols": [], "postprocess": () => null },
+    { "name": "seq$ebnf$2", "symbols": [] },
+    { "name": "seq$ebnf$2$subexpression$1$ebnf$1", "symbols": ["literal"], "postprocess": id },
+    { "name": "seq$ebnf$2$subexpression$1$ebnf$1", "symbols": [], "postprocess": () => null },
+    { "name": "seq$ebnf$2$subexpression$1", "symbols": ["tool", "seq$ebnf$2$subexpression$1$ebnf$1"] },
+    { "name": "seq$ebnf$2", "symbols": ["seq$ebnf$2", "seq$ebnf$2$subexpression$1"], "postprocess": (d) => d[0].concat([d[1]]) },
+    { "name": "seq", "symbols": ["seq$ebnf$1", "seq$ebnf$2"], "postprocess": ([firstLiteral, pairs]) => {
+            // pairs is an array of [[tool], literal]
+            // the literals are null if not present
+            let sequence = [firstLiteral];
+            for (let pair of pairs) {
+                sequence.push(pair[0][0]);
+                sequence.push(pair[1]);
+            }
+            return {
+                kind: 'seq',
+                children: sequence.filter(x => x !== null),
+            };
+        } },
+    { "name": "tool", "symbols": ["ref"] },
+    { "name": "tool", "symbols": ["chooseMultiLine"] },
+    { "name": "tool", "symbols": ["chooseOneLine"] },
+    { "name": "ref$ebnf$1", "symbols": [] },
+    { "name": "ref$ebnf$1$subexpression$1", "symbols": [(lexer.has("dot") ? { type: "dot" } : dot), (lexer.has("ruleName") ? { type: "ruleName" } : ruleName)] },
+    { "name": "ref$ebnf$1", "symbols": ["ref$ebnf$1", "ref$ebnf$1$subexpression$1"], "postprocess": (d) => d[0].concat([d[1]]) },
+    { "name": "ref", "symbols": [{ "literal": "<" }, (lexer.has("ruleName") ? { type: "ruleName" } : ruleName), "ref$ebnf$1", { "literal": ">" }], "postprocess": (parts) => {
+            parts = flatten(parts);
+            parts = parts.slice(1, parts.length - 1); // remove < and >
+            let name = parts.shift().value;
+            let mods = [];
+            while (parts.length > 0) {
+                let mod = parts.shift();
+                if (mod.type !== 'dot') {
+                    mods.push(mod.value);
+                }
+            }
+            return {
+                kind: 'ref',
+                name: name,
+                mods: mods,
+            };
+        } },
+    { "name": "chooseMultiLine$ebnf$1", "symbols": [(lexer.has("nl") ? { type: "nl" } : nl)], "postprocess": id },
+    { "name": "chooseMultiLine$ebnf$1", "symbols": [], "postprocess": () => null },
+    { "name": "chooseMultiLine$ebnf$2", "symbols": [] },
+    { "name": "chooseMultiLine$ebnf$2$subexpression$1", "symbols": [(lexer.has("nl") ? { type: "nl" } : nl), "seq"] },
+    { "name": "chooseMultiLine$ebnf$2", "symbols": ["chooseMultiLine$ebnf$2", "chooseMultiLine$ebnf$2$subexpression$1"], "postprocess": (d) => d[0].concat([d[1]]) },
+    { "name": "chooseMultiLine$ebnf$3", "symbols": [(lexer.has("nl") ? { type: "nl" } : nl)], "postprocess": id },
+    { "name": "chooseMultiLine$ebnf$3", "symbols": [], "postprocess": () => null },
+    { "name": "chooseMultiLine", "symbols": [{ "literal": "[" }, "chooseMultiLine$ebnf$1", "seq", "chooseMultiLine$ebnf$2", "chooseMultiLine$ebnf$3", { "literal": "]" }], "postprocess": (parts) => {
+            let children = flatten(parts);
+            //console.log('----------------\\');
+            //console.log(JSON.stringify(children, null, 4));
+            children = children.filter(child => child !== null && child.type !== 'lbrak' && child.type !== 'nl' && child.type !== 'rbrak');
+            // remove empty lines
+            children = children.filter(child => !(child.kind === 'seq' && child.children.length === 0)
+            //&& ! (child.kind === 'seq' && child.children.length === 1 && child.children[0]
+            );
+            //console.log('----------------');
+            //console.log(JSON.stringify(children, null, 4));
+            //console.log('----------------/');
+            return {
+                kind: 'choose',
+                children: children,
+            };
+        } },
+    { "name": "chooseOneLine$ebnf$1", "symbols": [] },
+    { "name": "chooseOneLine$ebnf$1$subexpression$1", "symbols": [(lexer.has("or") ? { type: "or" } : or), "seq"] },
+    { "name": "chooseOneLine$ebnf$1", "symbols": ["chooseOneLine$ebnf$1", "chooseOneLine$ebnf$1$subexpression$1"], "postprocess": (d) => d[0].concat([d[1]]) },
+    { "name": "chooseOneLine", "symbols": [{ "literal": "[" }, "seq", "chooseOneLine$ebnf$1", { "literal": "]" }], "postprocess": (parts) => {
+            let children = flatten(parts);
+            children = children.filter(child => child.type !== 'lbrak' && child.type !== 'or' && child.type !== 'rbrak');
+            return {
+                kind: 'choose',
+                children: children,
+            };
+        } },
+    { "name": "literal$ebnf$1$subexpression$1", "symbols": [(lexer.has("ruleName") ? { type: "ruleName" } : ruleName)] },
+    { "name": "literal$ebnf$1$subexpression$1", "symbols": [(lexer.has("dot") ? { type: "dot" } : dot)] },
+    { "name": "literal$ebnf$1$subexpression$1", "symbols": [(lexer.has("nonControlChars") ? { type: "nonControlChars" } : nonControlChars)] },
+    { "name": "literal$ebnf$1", "symbols": ["literal$ebnf$1$subexpression$1"] },
+    { "name": "literal$ebnf$1$subexpression$2", "symbols": [(lexer.has("ruleName") ? { type: "ruleName" } : ruleName)] },
+    { "name": "literal$ebnf$1$subexpression$2", "symbols": [(lexer.has("dot") ? { type: "dot" } : dot)] },
+    { "name": "literal$ebnf$1$subexpression$2", "symbols": [(lexer.has("nonControlChars") ? { type: "nonControlChars" } : nonControlChars)] },
+    { "name": "literal$ebnf$1", "symbols": ["literal$ebnf$1", "literal$ebnf$1$subexpression$2"], "postprocess": (d) => d[0].concat([d[1]]) },
+    { "name": "literal", "symbols": ["literal$ebnf$1"], "postprocess": (pieces) => {
+            let text = pieces[0].map((p) => p[0].value).join('');
+            return { kind: 'literal', text: text };
+        } }
+];
+exports.ParserStart = "ruleDecls";
+
+},{"moo":3}],3:[function(require,module,exports){
+(function(root, factory) {
+  if (typeof define === 'function' && define.amd) {
+    define([], factory) /* global define */
+  } else if (typeof module === 'object' && module.exports) {
+    module.exports = factory()
+  } else {
+    root.moo = factory()
+  }
+}(this, function() {
+  'use strict';
+
+  var hasOwnProperty = Object.prototype.hasOwnProperty
+  var toString = Object.prototype.toString
+  var hasSticky = typeof new RegExp().sticky === 'boolean'
+
+  /***************************************************************************/
+
+  function isRegExp(o) { return o && toString.call(o) === '[object RegExp]' }
+  function isObject(o) { return o && typeof o === 'object' && !isRegExp(o) && !Array.isArray(o) }
+
+  function reEscape(s) {
+    return s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+  }
+  function reGroups(s) {
+    var re = new RegExp('|' + s)
+    return re.exec('').length - 1
+  }
+  function reCapture(s) {
+    return '(' + s + ')'
+  }
+  function reUnion(regexps) {
+    if (!regexps.length) return '(?!)'
+    var source =  regexps.map(function(s) {
+      return "(?:" + s + ")"
+    }).join('|')
+    return "(?:" + source + ")"
+  }
+
+  function regexpOrLiteral(obj) {
+    if (typeof obj === 'string') {
+      return '(?:' + reEscape(obj) + ')'
+
+    } else if (isRegExp(obj)) {
+      // TODO: consider /u support
+      if (obj.ignoreCase) throw new Error('RegExp /i flag not allowed')
+      if (obj.global) throw new Error('RegExp /g flag is implied')
+      if (obj.sticky) throw new Error('RegExp /y flag is implied')
+      if (obj.multiline) throw new Error('RegExp /m flag is implied')
+      if (obj.unicode) throw new Error('RegExp /u flag is not allowed')
+      return obj.source
+
+    } else {
+      throw new Error('Not a pattern: ' + obj)
+    }
+  }
+
+  function objectToRules(object) {
+    var keys = Object.getOwnPropertyNames(object)
+    var result = []
+    for (var i = 0; i < keys.length; i++) {
+      var key = keys[i]
+      var thing = object[key]
+      var rules = [].concat(thing)
+      if (key === 'include') {
+        for (var j = 0; j < rules.length; j++) {
+          result.push({include: rules[j]})
+        }
+        continue
+      }
+      var match = []
+      rules.forEach(function(rule) {
+        if (isObject(rule)) {
+          if (match.length) result.push(ruleOptions(key, match))
+          result.push(ruleOptions(key, rule))
+          match = []
+        } else {
+          match.push(rule)
+        }
+      })
+      if (match.length) result.push(ruleOptions(key, match))
+    }
+    return result
+  }
+
+  function arrayToRules(array) {
+    var result = []
+    for (var i = 0; i < array.length; i++) {
+      var obj = array[i]
+      if (obj.include) {
+        var include = [].concat(obj.include)
+        for (var j = 0; j < include.length; j++) {
+          result.push({include: include[j]})
+        }
+        continue
+      }
+      if (!obj.type) {
+        throw new Error('Rule has no type: ' + JSON.stringify(obj))
+      }
+      result.push(ruleOptions(obj.type, obj))
+    }
+    return result
+  }
+
+  function ruleOptions(type, obj) {
+    if (!isObject(obj)) {
+      obj = { match: obj }
+    }
+    if (obj.include) {
+      throw new Error('Matching rules cannot also include states')
+    }
+
+    // nb. error and fallback imply lineBreaks
+    var options = {
+      defaultType: type,
+      lineBreaks: !!obj.error || !!obj.fallback,
+      pop: false,
+      next: null,
+      push: null,
+      error: false,
+      fallback: false,
+      value: null,
+      type: null,
+      shouldThrow: false,
+    }
+
+    // Avoid Object.assign(), so we support IE9+
+    for (var key in obj) {
+      if (hasOwnProperty.call(obj, key)) {
+        options[key] = obj[key]
+      }
+    }
+
+    // type transform cannot be a string
+    if (typeof options.type === 'string' && type !== options.type) {
+      throw new Error("Type transform cannot be a string (type '" + options.type + "' for token '" + type + "')")
+    }
+
+    // convert to array
+    var match = options.match
+    options.match = Array.isArray(match) ? match : match ? [match] : []
+    options.match.sort(function(a, b) {
+      return isRegExp(a) && isRegExp(b) ? 0
+           : isRegExp(b) ? -1 : isRegExp(a) ? +1 : b.length - a.length
+    })
+    return options
+  }
+
+  function toRules(spec) {
+    return Array.isArray(spec) ? arrayToRules(spec) : objectToRules(spec)
+  }
+
+  var defaultErrorRule = ruleOptions('error', {lineBreaks: true, shouldThrow: true})
+  function compileRules(rules, hasStates) {
+    var errorRule = null
+    var fast = Object.create(null)
+    var fastAllowed = true
+    var groups = []
+    var parts = []
+
+    // If there is a fallback rule, then disable fast matching
+    for (var i = 0; i < rules.length; i++) {
+      if (rules[i].fallback) {
+        fastAllowed = false
+      }
+    }
+
+    for (var i = 0; i < rules.length; i++) {
+      var options = rules[i]
+
+      if (options.include) {
+        // all valid inclusions are removed by states() preprocessor
+        throw new Error('Inheritance is not allowed in stateless lexers')
+      }
+
+      if (options.error || options.fallback) {
+        // errorRule can only be set once
+        if (errorRule) {
+          if (!options.fallback === !errorRule.fallback) {
+            throw new Error("Multiple " + (options.fallback ? "fallback" : "error") + " rules not allowed (for token '" + options.defaultType + "')")
+          } else {
+            throw new Error("fallback and error are mutually exclusive (for token '" + options.defaultType + "')")
+          }
+        }
+        errorRule = options
+      }
+
+      var match = options.match
+      if (fastAllowed) {
+        while (match.length && typeof match[0] === 'string' && match[0].length === 1) {
+          var word = match.shift()
+          fast[word.charCodeAt(0)] = options
+        }
+      }
+
+      // Warn about inappropriate state-switching options
+      if (options.pop || options.push || options.next) {
+        if (!hasStates) {
+          throw new Error("State-switching options are not allowed in stateless lexers (for token '" + options.defaultType + "')")
+        }
+        if (options.fallback) {
+          throw new Error("State-switching options are not allowed on fallback tokens (for token '" + options.defaultType + "')")
+        }
+      }
+
+      // Only rules with a .match are included in the RegExp
+      if (match.length === 0) {
+        continue
+      }
+      fastAllowed = false
+
+      groups.push(options)
+
+      // convert to RegExp
+      var pat = reUnion(match.map(regexpOrLiteral))
+
+      // validate
+      var regexp = new RegExp(pat)
+      if (regexp.test("")) {
+        throw new Error("RegExp matches empty string: " + regexp)
+      }
+      var groupCount = reGroups(pat)
+      if (groupCount > 0) {
+        throw new Error("RegExp has capture groups: " + regexp + "\nUse (?: … ) instead")
+      }
+
+      // try and detect rules matching newlines
+      if (!options.lineBreaks && regexp.test('\n')) {
+        throw new Error('Rule should declare lineBreaks: ' + regexp)
+      }
+
+      // store regex
+      parts.push(reCapture(pat))
+    }
+
+
+    // If there's no fallback rule, use the sticky flag so we only look for
+    // matches at the current index.
+    //
+    // If we don't support the sticky flag, then fake it using an irrefutable
+    // match (i.e. an empty pattern).
+    var fallbackRule = errorRule && errorRule.fallback
+    var flags = hasSticky && !fallbackRule ? 'ym' : 'gm'
+    var suffix = hasSticky || fallbackRule ? '' : '|'
+    var combined = new RegExp(reUnion(parts) + suffix, flags)
+
+    return {regexp: combined, groups: groups, fast: fast, error: errorRule || defaultErrorRule}
+  }
+
+  function compile(rules) {
+    var result = compileRules(toRules(rules))
+    return new Lexer({start: result}, 'start')
+  }
+
+  function checkStateGroup(g, name, map) {
+    var state = g && (g.push || g.next)
+    if (state && !map[state]) {
+      throw new Error("Missing state '" + state + "' (in token '" + g.defaultType + "' of state '" + name + "')")
+    }
+    if (g && g.pop && +g.pop !== 1) {
+      throw new Error("pop must be 1 (in token '" + g.defaultType + "' of state '" + name + "')")
+    }
+  }
+  function compileStates(states, start) {
+    var all = states.$all ? toRules(states.$all) : []
+    delete states.$all
+
+    var keys = Object.getOwnPropertyNames(states)
+    if (!start) start = keys[0]
+
+    var ruleMap = Object.create(null)
+    for (var i = 0; i < keys.length; i++) {
+      var key = keys[i]
+      ruleMap[key] = toRules(states[key]).concat(all)
+    }
+    for (var i = 0; i < keys.length; i++) {
+      var key = keys[i]
+      var rules = ruleMap[key]
+      var included = Object.create(null)
+      for (var j = 0; j < rules.length; j++) {
+        var rule = rules[j]
+        if (!rule.include) continue
+        var splice = [j, 1]
+        if (rule.include !== key && !included[rule.include]) {
+          included[rule.include] = true
+          var newRules = ruleMap[rule.include]
+          if (!newRules) {
+            throw new Error("Cannot include nonexistent state '" + rule.include + "' (in state '" + key + "')")
+          }
+          for (var k = 0; k < newRules.length; k++) {
+            var newRule = newRules[k]
+            if (rules.indexOf(newRule) !== -1) continue
+            splice.push(newRule)
+          }
+        }
+        rules.splice.apply(rules, splice)
+        j--
+      }
+    }
+
+    var map = Object.create(null)
+    for (var i = 0; i < keys.length; i++) {
+      var key = keys[i]
+      map[key] = compileRules(ruleMap[key], true)
+    }
+
+    for (var i = 0; i < keys.length; i++) {
+      var name = keys[i]
+      var state = map[name]
+      var groups = state.groups
+      for (var j = 0; j < groups.length; j++) {
+        checkStateGroup(groups[j], name, map)
+      }
+      var fastKeys = Object.getOwnPropertyNames(state.fast)
+      for (var j = 0; j < fastKeys.length; j++) {
+        checkStateGroup(state.fast[fastKeys[j]], name, map)
+      }
+    }
+
+    return new Lexer(map, start)
+  }
+
+  function keywordTransform(map) {
+    var reverseMap = Object.create(null)
+    var byLength = Object.create(null)
+    var types = Object.getOwnPropertyNames(map)
+    for (var i = 0; i < types.length; i++) {
+      var tokenType = types[i]
+      var item = map[tokenType]
+      var keywordList = Array.isArray(item) ? item : [item]
+      keywordList.forEach(function(keyword) {
+        (byLength[keyword.length] = byLength[keyword.length] || []).push(keyword)
+        if (typeof keyword !== 'string') {
+          throw new Error("keyword must be string (in keyword '" + tokenType + "')")
+        }
+        reverseMap[keyword] = tokenType
+      })
+    }
+
+    // fast string lookup
+    // https://jsperf.com/string-lookups
+    function str(x) { return JSON.stringify(x) }
+    var source = ''
+    source += 'switch (value.length) {\n'
+    for (var length in byLength) {
+      var keywords = byLength[length]
+      source += 'case ' + length + ':\n'
+      source += 'switch (value) {\n'
+      keywords.forEach(function(keyword) {
+        var tokenType = reverseMap[keyword]
+        source += 'case ' + str(keyword) + ': return ' + str(tokenType) + '\n'
+      })
+      source += '}\n'
+    }
+    source += '}\n'
+    return Function('value', source) // type
+  }
+
+  /***************************************************************************/
+
+  var Lexer = function(states, state) {
+    this.startState = state
+    this.states = states
+    this.buffer = ''
+    this.stack = []
+    this.reset()
+  }
+
+  Lexer.prototype.reset = function(data, info) {
+    this.buffer = data || ''
+    this.index = 0
+    this.line = info ? info.line : 1
+    this.col = info ? info.col : 1
+    this.queuedToken = info ? info.queuedToken : null
+    this.queuedThrow = info ? info.queuedThrow : null
+    this.setState(info ? info.state : this.startState)
+    this.stack = info && info.stack ? info.stack.slice() : []
+    return this
+  }
+
+  Lexer.prototype.save = function() {
+    return {
+      line: this.line,
+      col: this.col,
+      state: this.state,
+      stack: this.stack.slice(),
+      queuedToken: this.queuedToken,
+      queuedThrow: this.queuedThrow,
+    }
+  }
+
+  Lexer.prototype.setState = function(state) {
+    if (!state || this.state === state) return
+    this.state = state
+    var info = this.states[state]
+    this.groups = info.groups
+    this.error = info.error
+    this.re = info.regexp
+    this.fast = info.fast
+  }
+
+  Lexer.prototype.popState = function() {
+    this.setState(this.stack.pop())
+  }
+
+  Lexer.prototype.pushState = function(state) {
+    this.stack.push(this.state)
+    this.setState(state)
+  }
+
+  var eat = hasSticky ? function(re, buffer) { // assume re is /y
+    return re.exec(buffer)
+  } : function(re, buffer) { // assume re is /g
+    var match = re.exec(buffer)
+    // will always match, since we used the |(?:) trick
+    if (match[0].length === 0) {
+      return null
+    }
+    return match
+  }
+
+  Lexer.prototype._getGroup = function(match) {
+    var groupCount = this.groups.length
+    for (var i = 0; i < groupCount; i++) {
+      if (match[i + 1] !== undefined) {
+        return this.groups[i]
+      }
+    }
+    throw new Error('Cannot find token type for matched text')
+  }
+
+  function tokenToString() {
+    return this.value
+  }
+
+  Lexer.prototype.next = function() {
+    var index = this.index
+
+    // If a fallback token matched, we don't need to re-run the RegExp
+    if (this.queuedGroup) {
+      var token = this._token(this.queuedGroup, this.queuedText, index)
+      this.queuedGroup = null
+      this.queuedText = ""
+      return token
+    }
+
+    var buffer = this.buffer
+    if (index === buffer.length) {
+      return // EOF
+    }
+
+    // Fast matching for single characters
+    var group = this.fast[buffer.charCodeAt(index)]
+    if (group) {
+      return this._token(group, buffer.charAt(index), index)
+    }
+
+    // Execute RegExp
+    var re = this.re
+    re.lastIndex = index
+    var match = eat(re, buffer)
+
+    // Error tokens match the remaining buffer
+    var error = this.error
+    if (match == null) {
+      return this._token(error, buffer.slice(index, buffer.length), index)
+    }
+
+    var group = this._getGroup(match)
+    var text = match[0]
+
+    if (error.fallback && match.index !== index) {
+      this.queuedGroup = group
+      this.queuedText = text
+
+      // Fallback tokens contain the unmatched portion of the buffer
+      return this._token(error, buffer.slice(index, match.index), index)
+    }
+
+    return this._token(group, text, index)
+  }
+
+  Lexer.prototype._token = function(group, text, offset) {
+    // count line breaks
+    var lineBreaks = 0
+    if (group.lineBreaks) {
+      var matchNL = /\n/g
+      var nl = 1
+      if (text === '\n') {
+        lineBreaks = 1
+      } else {
+        while (matchNL.exec(text)) { lineBreaks++; nl = matchNL.lastIndex }
+      }
+    }
+
+    var token = {
+      type: (typeof group.type === 'function' && group.type(text)) || group.defaultType,
+      value: typeof group.value === 'function' ? group.value(text) : text,
+      text: text,
+      toString: tokenToString,
+      offset: offset,
+      lineBreaks: lineBreaks,
+      line: this.line,
+      col: this.col,
+    }
+    // nb. adding more props to token object will make V8 sad!
+
+    var size = text.length
+    this.index += size
+    this.line += lineBreaks
+    if (lineBreaks !== 0) {
+      this.col = size - nl + 1
+    } else {
+      this.col += size
+    }
+
+    // throw, if no rule with {error: true}
+    if (group.shouldThrow) {
+      throw new Error(this.formatError(token, "invalid syntax"))
+    }
+
+    if (group.pop) this.popState()
+    else if (group.push) this.pushState(group.push)
+    else if (group.next) this.setState(group.next)
+
+    return token
+  }
+
+  if (typeof Symbol !== 'undefined' && Symbol.iterator) {
+    var LexerIterator = function(lexer) {
+      this.lexer = lexer
+    }
+
+    LexerIterator.prototype.next = function() {
+      var token = this.lexer.next()
+      return {value: token, done: !token}
+    }
+
+    LexerIterator.prototype[Symbol.iterator] = function() {
+      return this
+    }
+
+    Lexer.prototype[Symbol.iterator] = function() {
+      return new LexerIterator(this)
+    }
+  }
+
+  Lexer.prototype.formatError = function(token, message) {
+    var value = token.text
+    var index = token.offset
+    var eol = token.lineBreaks ? value.indexOf('\n') : value.length
+    var start = Math.max(0, index - token.col + 1)
+    var firstLine = this.buffer.substring(start, index + eol)
+    message += " at line " + token.line + " col " + token.col + ":\n\n"
+    message += "  " + firstLine + "\n"
+    message += "  " + Array(token.col).join(" ") + "^"
+    return message
+  }
+
+  Lexer.prototype.clone = function() {
+    return new Lexer(this.states, this.state)
+  }
+
+  Lexer.prototype.has = function(tokenType) {
+    return true
+  }
+
+
+  return {
+    compile: compile,
+    states: compileStates,
+    error: Object.freeze({error: true}),
+    fallback: Object.freeze({fallback: true}),
+    keywords: keywordTransform,
+  }
+
+}));
+
+},{}],4:[function(require,module,exports){
+(function(root, factory) {
+    if (typeof module === 'object' && module.exports) {
+        module.exports = factory();
+    } else {
+        root.nearley = factory();
+    }
+}(this, function() {
+
+    function Rule(name, symbols, postprocess) {
+        this.id = ++Rule.highestId;
+        this.name = name;
+        this.symbols = symbols;        // a list of literal | regex class | nonterminal
+        this.postprocess = postprocess;
+        return this;
+    }
+    Rule.highestId = 0;
+
+    Rule.prototype.toString = function(withCursorAt) {
+        function stringifySymbolSequence (e) {
+            return e.literal ? JSON.stringify(e.literal) :
+                   e.type ? '%' + e.type : e.toString();
+        }
+        var symbolSequence = (typeof withCursorAt === "undefined")
+                             ? this.symbols.map(stringifySymbolSequence).join(' ')
+                             : (   this.symbols.slice(0, withCursorAt).map(stringifySymbolSequence).join(' ')
+                                 + " ● "
+                                 + this.symbols.slice(withCursorAt).map(stringifySymbolSequence).join(' ')     );
+        return this.name + " → " + symbolSequence;
+    }
+
+
+    // a State is a rule at a position from a given starting point in the input stream (reference)
+    function State(rule, dot, reference, wantedBy) {
+        this.rule = rule;
+        this.dot = dot;
+        this.reference = reference;
+        this.data = [];
+        this.wantedBy = wantedBy;
+        this.isComplete = this.dot === rule.symbols.length;
+    }
+
+    State.prototype.toString = function() {
+        return "{" + this.rule.toString(this.dot) + "}, from: " + (this.reference || 0);
+    };
+
+    State.prototype.nextState = function(child) {
+        var state = new State(this.rule, this.dot + 1, this.reference, this.wantedBy);
+        state.left = this;
+        state.right = child;
+        if (state.isComplete) {
+            state.data = state.build();
+        }
+        return state;
+    };
+
+    State.prototype.build = function() {
+        var children = [];
+        var node = this;
+        do {
+            children.push(node.right.data);
+            node = node.left;
+        } while (node.left);
+        children.reverse();
+        return children;
+    };
+
+    State.prototype.finish = function() {
+        if (this.rule.postprocess) {
+            this.data = this.rule.postprocess(this.data, this.reference, Parser.fail);
+        }
+    };
+
+
+    function Column(grammar, index) {
+        this.grammar = grammar;
+        this.index = index;
+        this.states = [];
+        this.wants = {}; // states indexed by the non-terminal they expect
+        this.scannable = []; // list of states that expect a token
+        this.completed = {}; // states that are nullable
+    }
+
+
+    Column.prototype.process = function(nextColumn) {
+        var states = this.states;
+        var wants = this.wants;
+        var completed = this.completed;
+
+        for (var w = 0; w < states.length; w++) { // nb. we push() during iteration
+            var state = states[w];
+
+            if (state.isComplete) {
+                state.finish();
+                if (state.data !== Parser.fail) {
+                    // complete
+                    var wantedBy = state.wantedBy;
+                    for (var i = wantedBy.length; i--; ) { // this line is hot
+                        var left = wantedBy[i];
+                        this.complete(left, state);
+                    }
+
+                    // special-case nullables
+                    if (state.reference === this.index) {
+                        // make sure future predictors of this rule get completed.
+                        var exp = state.rule.name;
+                        (this.completed[exp] = this.completed[exp] || []).push(state);
+                    }
+                }
+
+            } else {
+                // queue scannable states
+                var exp = state.rule.symbols[state.dot];
+                if (typeof exp !== 'string') {
+                    this.scannable.push(state);
+                    continue;
+                }
+
+                // predict
+                if (wants[exp]) {
+                    wants[exp].push(state);
+
+                    if (completed.hasOwnProperty(exp)) {
+                        var nulls = completed[exp];
+                        for (var i = 0; i < nulls.length; i++) {
+                            var right = nulls[i];
+                            this.complete(state, right);
+                        }
+                    }
+                } else {
+                    wants[exp] = [state];
+                    this.predict(exp);
+                }
+            }
+        }
+    }
+
+    Column.prototype.predict = function(exp) {
+        var rules = this.grammar.byName[exp] || [];
+
+        for (var i = 0; i < rules.length; i++) {
+            var r = rules[i];
+            var wantedBy = this.wants[exp];
+            var s = new State(r, 0, this.index, wantedBy);
+            this.states.push(s);
+        }
+    }
+
+    Column.prototype.complete = function(left, right) {
+        var copy = left.nextState(right);
+        this.states.push(copy);
+    }
+
+
+    function Grammar(rules, start) {
+        this.rules = rules;
+        this.start = start || this.rules[0].name;
+        var byName = this.byName = {};
+        this.rules.forEach(function(rule) {
+            if (!byName.hasOwnProperty(rule.name)) {
+                byName[rule.name] = [];
+            }
+            byName[rule.name].push(rule);
+        });
+    }
+
+    // So we can allow passing (rules, start) directly to Parser for backwards compatibility
+    Grammar.fromCompiled = function(rules, start) {
+        var lexer = rules.Lexer;
+        if (rules.ParserStart) {
+          start = rules.ParserStart;
+          rules = rules.ParserRules;
+        }
+        var rules = rules.map(function (r) { return (new Rule(r.name, r.symbols, r.postprocess)); });
+        var g = new Grammar(rules, start);
+        g.lexer = lexer; // nb. storing lexer on Grammar is iffy, but unavoidable
+        return g;
+    }
+
+
+    function StreamLexer() {
+      this.reset("");
+    }
+
+    StreamLexer.prototype.reset = function(data, state) {
+        this.buffer = data;
+        this.index = 0;
+        this.line = state ? state.line : 1;
+        this.lastLineBreak = state ? -state.col : 0;
+    }
+
+    StreamLexer.prototype.next = function() {
+        if (this.index < this.buffer.length) {
+            var ch = this.buffer[this.index++];
+            if (ch === '\n') {
+              this.line += 1;
+              this.lastLineBreak = this.index;
+            }
+            return {value: ch};
+        }
+    }
+
+    StreamLexer.prototype.save = function() {
+      return {
+        line: this.line,
+        col: this.index - this.lastLineBreak,
+      }
+    }
+
+    StreamLexer.prototype.formatError = function(token, message) {
+        // nb. this gets called after consuming the offending token,
+        // so the culprit is index-1
+        var buffer = this.buffer;
+        if (typeof buffer === 'string') {
+            var nextLineBreak = buffer.indexOf('\n', this.index);
+            if (nextLineBreak === -1) nextLineBreak = buffer.length;
+            var line = buffer.substring(this.lastLineBreak, nextLineBreak)
+            var col = this.index - this.lastLineBreak;
+            message += " at line " + this.line + " col " + col + ":\n\n";
+            message += "  " + line + "\n"
+            message += "  " + Array(col).join(" ") + "^"
+            return message;
+        } else {
+            return message + " at index " + (this.index - 1);
+        }
+    }
+
+
+    function Parser(rules, start, options) {
+        if (rules instanceof Grammar) {
+            var grammar = rules;
+            var options = start;
+        } else {
+            var grammar = Grammar.fromCompiled(rules, start);
+        }
+        this.grammar = grammar;
+
+        // Read options
+        this.options = {
+            keepHistory: false,
+            lexer: grammar.lexer || new StreamLexer,
+        };
+        for (var key in (options || {})) {
+            this.options[key] = options[key];
+        }
+
+        // Setup lexer
+        this.lexer = this.options.lexer;
+        this.lexerState = undefined;
+
+        // Setup a table
+        var column = new Column(grammar, 0);
+        var table = this.table = [column];
+
+        // I could be expecting anything.
+        column.wants[grammar.start] = [];
+        column.predict(grammar.start);
+        // TODO what if start rule is nullable?
+        column.process();
+        this.current = 0; // token index
+    }
+
+    // create a reserved token for indicating a parse fail
+    Parser.fail = {};
+
+    Parser.prototype.feed = function(chunk) {
+        var lexer = this.lexer;
+        lexer.reset(chunk, this.lexerState);
+
+        var token;
+        while (token = lexer.next()) {
+            // We add new states to table[current+1]
+            var column = this.table[this.current];
+
+            // GC unused states
+            if (!this.options.keepHistory) {
+                delete this.table[this.current - 1];
+            }
+
+            var n = this.current + 1;
+            var nextColumn = new Column(this.grammar, n);
+            this.table.push(nextColumn);
+
+            // Advance all tokens that expect the symbol
+            var literal = token.text !== undefined ? token.text : token.value;
+            var value = lexer.constructor === StreamLexer ? token.value : token;
+            var scannable = column.scannable;
+            for (var w = scannable.length; w--; ) {
+                var state = scannable[w];
+                var expect = state.rule.symbols[state.dot];
+                // Try to consume the token
+                // either regex or literal
+                if (expect.test ? expect.test(value) :
+                    expect.type ? expect.type === token.type
+                                : expect.literal === literal) {
+                    // Add it
+                    var next = state.nextState({data: value, token: token, isToken: true, reference: n - 1});
+                    nextColumn.states.push(next);
+                }
+            }
+
+            // Next, for each of the rules, we either
+            // (a) complete it, and try to see if the reference row expected that
+            //     rule
+            // (b) predict the next nonterminal it expects by adding that
+            //     nonterminal's start state
+            // To prevent duplication, we also keep track of rules we have already
+            // added
+
+            nextColumn.process();
+
+            // If needed, throw an error:
+            if (nextColumn.states.length === 0) {
+                // No states at all! This is not good.
+                var message = this.lexer.formatError(token, "invalid syntax") + "\n";
+                message += "Unexpected " + (token.type ? token.type + " token: " : "");
+                message += JSON.stringify(token.value !== undefined ? token.value : token) + "\n";
+                var err = new Error(message);
+                err.offset = this.current;
+                err.token = token;
+                throw err;
+            }
+
+            // maybe save lexer state
+            if (this.options.keepHistory) {
+              column.lexerState = lexer.save()
+            }
+
+            this.current++;
+        }
+        if (column) {
+          this.lexerState = lexer.save()
+        }
+
+        // Incrementally keep track of results
+        this.results = this.finish();
+
+        // Allow chaining, for whatever it's worth
+        return this;
+    };
+
+    Parser.prototype.save = function() {
+        var column = this.table[this.current];
+        column.lexerState = this.lexerState;
+        return column;
+    };
+
+    Parser.prototype.restore = function(column) {
+        var index = column.index;
+        this.current = index;
+        this.table[index] = column;
+        this.table.splice(index + 1);
+        this.lexerState = column.lexerState;
+
+        // Incrementally keep track of results
+        this.results = this.finish();
+    };
+
+    // nb. deprecated: use save/restore instead!
+    Parser.prototype.rewind = function(index) {
+        if (!this.options.keepHistory) {
+            throw new Error('set option `keepHistory` to enable rewinding')
+        }
+        // nb. recall column (table) indicies fall between token indicies.
+        //        col 0   --   token 0   --   col 1
+        this.restore(this.table[index]);
+    };
+
+    Parser.prototype.finish = function() {
+        // Return the possible parsings
+        var considerations = [];
+        var start = this.grammar.start;
+        var column = this.table[this.table.length - 1]
+        column.states.forEach(function (t) {
+            if (t.rule.name === start
+                    && t.dot === t.rule.symbols.length
+                    && t.reference === 0
+                    && t.data !== Parser.fail) {
+                considerations.push(t);
+            }
+        });
+        return considerations.map(function(c) {return c.data; });
+    };
+
+    return {
+        Parser: Parser,
+        Grammar: Grammar,
+        Rule: Rule,
+    };
+
+}));
+
+},{}],5:[function(require,module,exports){
 /*
 object-assign
 (c) Sindre Sorhus
@@ -90,7 +1439,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
 	return to;
 };
 
-},{}],2:[function(require,module,exports){
+},{}],6:[function(require,module,exports){
 // shim for using process in browser
 var process = module.exports = {};
 
@@ -276,7 +1625,7 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],3:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 (function (process){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
@@ -382,7 +1731,7 @@ checkPropTypes.resetWarningCache = function() {
 module.exports = checkPropTypes;
 
 }).call(this,require('_process'))
-},{"./lib/ReactPropTypesSecret":4,"_process":2}],4:[function(require,module,exports){
+},{"./lib/ReactPropTypesSecret":8,"_process":6}],8:[function(require,module,exports){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
  *
@@ -396,7 +1745,7 @@ var ReactPropTypesSecret = 'SECRET_DO_NOT_PASS_THIS_OR_YOU_WILL_BE_FIRED';
 
 module.exports = ReactPropTypesSecret;
 
-},{}],5:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 (function (process){
 /** @license React v16.8.6
  * react-dom.development.js
@@ -21678,7 +23027,7 @@ module.exports = reactDom;
 }
 
 }).call(this,require('_process'))
-},{"_process":2,"object-assign":1,"prop-types/checkPropTypes":3,"react":10,"scheduler":15,"scheduler/tracing":16}],6:[function(require,module,exports){
+},{"_process":6,"object-assign":5,"prop-types/checkPropTypes":7,"react":14,"scheduler":19,"scheduler/tracing":20}],10:[function(require,module,exports){
 /** @license React v16.8.6
  * react-dom.production.min.js
  *
@@ -21949,7 +23298,7 @@ x("38"):void 0;return Si(a,b,c,!1,d)},unmountComponentAtNode:function(a){Qi(a)?v
 X;X=!0;try{ki(a)}finally{(X=b)||W||Yh(1073741823,!1)}},__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED:{Events:[Ia,Ja,Ka,Ba.injectEventPluginsByName,pa,Qa,function(a){ya(a,Pa)},Eb,Fb,Dd,Da]}};function Ui(a,b){Qi(a)?void 0:x("299","unstable_createRoot");return new Pi(a,!0,null!=b&&!0===b.hydrate)}
 (function(a){var b=a.findFiberByHostInstance;return Te(n({},a,{overrideProps:null,currentDispatcherRef:Tb.ReactCurrentDispatcher,findHostInstanceByFiber:function(a){a=hd(a);return null===a?null:a.stateNode},findFiberByHostInstance:function(a){return b?b(a):null}}))})({findFiberByHostInstance:Ha,bundleType:0,version:"16.8.6",rendererPackageName:"react-dom"});var Wi={default:Vi},Xi=Wi&&Vi||Wi;module.exports=Xi.default||Xi;
 
-},{"object-assign":1,"react":10,"scheduler":15}],7:[function(require,module,exports){
+},{"object-assign":5,"react":14,"scheduler":19}],11:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -21991,7 +23340,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 }).call(this,require('_process'))
-},{"./cjs/react-dom.development.js":5,"./cjs/react-dom.production.min.js":6,"_process":2}],8:[function(require,module,exports){
+},{"./cjs/react-dom.development.js":9,"./cjs/react-dom.production.min.js":10,"_process":6}],12:[function(require,module,exports){
 (function (process){
 /** @license React v16.8.6
  * react.development.js
@@ -23896,7 +25245,7 @@ module.exports = react;
 }
 
 }).call(this,require('_process'))
-},{"_process":2,"object-assign":1,"prop-types/checkPropTypes":3}],9:[function(require,module,exports){
+},{"_process":6,"object-assign":5,"prop-types/checkPropTypes":7}],13:[function(require,module,exports){
 /** @license React v16.8.6
  * react.production.min.js
  *
@@ -23923,7 +25272,7 @@ b,d){return W().useImperativeHandle(a,b,d)},useDebugValue:function(){},useLayout
 b){void 0!==b.ref&&(h=b.ref,f=J.current);void 0!==b.key&&(g=""+b.key);var l=void 0;a.type&&a.type.defaultProps&&(l=a.type.defaultProps);for(c in b)K.call(b,c)&&!L.hasOwnProperty(c)&&(e[c]=void 0===b[c]&&void 0!==l?l[c]:b[c])}c=arguments.length-2;if(1===c)e.children=d;else if(1<c){l=Array(c);for(var m=0;m<c;m++)l[m]=arguments[m+2];e.children=l}return{$$typeof:p,type:a.type,key:g,ref:h,props:e,_owner:f}},createFactory:function(a){var b=M.bind(null,a);b.type=a;return b},isValidElement:N,version:"16.8.6",
 unstable_ConcurrentMode:x,unstable_Profiler:u,__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED:{ReactCurrentDispatcher:I,ReactCurrentOwner:J,assign:k}},Y={default:X},Z=Y&&X||Y;module.exports=Z.default||Z;
 
-},{"object-assign":1}],10:[function(require,module,exports){
+},{"object-assign":5}],14:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -23934,7 +25283,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 }).call(this,require('_process'))
-},{"./cjs/react.development.js":8,"./cjs/react.production.min.js":9,"_process":2}],11:[function(require,module,exports){
+},{"./cjs/react.development.js":12,"./cjs/react.production.min.js":13,"_process":6}],15:[function(require,module,exports){
 (function (process){
 /** @license React v0.13.6
  * scheduler-tracing.development.js
@@ -24361,7 +25710,7 @@ exports.unstable_unsubscribe = unstable_unsubscribe;
 }
 
 }).call(this,require('_process'))
-},{"_process":2}],12:[function(require,module,exports){
+},{"_process":6}],16:[function(require,module,exports){
 /** @license React v0.13.6
  * scheduler-tracing.production.min.js
  *
@@ -24373,7 +25722,7 @@ exports.unstable_unsubscribe = unstable_unsubscribe;
 
 'use strict';Object.defineProperty(exports,"__esModule",{value:!0});var b=0;exports.__interactionsRef=null;exports.__subscriberRef=null;exports.unstable_clear=function(a){return a()};exports.unstable_getCurrent=function(){return null};exports.unstable_getThreadID=function(){return++b};exports.unstable_trace=function(a,d,c){return c()};exports.unstable_wrap=function(a){return a};exports.unstable_subscribe=function(){};exports.unstable_unsubscribe=function(){};
 
-},{}],13:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
 (function (process,global){
 /** @license React v0.13.6
  * scheduler.development.js
@@ -25076,7 +26425,7 @@ exports.unstable_getFirstCallbackNode = unstable_getFirstCallbackNode;
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"_process":2}],14:[function(require,module,exports){
+},{"_process":6}],18:[function(require,module,exports){
 (function (global){
 /** @license React v0.13.6
  * scheduler.production.min.js
@@ -25101,7 +26450,7 @@ b=c.previous;b.next=c.previous=a;a.next=c;a.previous=b}return a};exports.unstabl
 exports.unstable_shouldYield=function(){return!e&&(null!==d&&d.expirationTime<l||w())};exports.unstable_continueExecution=function(){null!==d&&p()};exports.unstable_pauseExecution=function(){};exports.unstable_getFirstCallbackNode=function(){return d};
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],15:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -25112,7 +26461,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 }).call(this,require('_process'))
-},{"./cjs/scheduler.development.js":13,"./cjs/scheduler.production.min.js":14,"_process":2}],16:[function(require,module,exports){
+},{"./cjs/scheduler.development.js":17,"./cjs/scheduler.production.min.js":18,"_process":6}],20:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -25123,7 +26472,186 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 }).call(this,require('_process'))
-},{"./cjs/scheduler-tracing.development.js":11,"./cjs/scheduler-tracing.production.min.js":12,"_process":2}],17:[function(require,module,exports){
+},{"./cjs/scheduler-tracing.development.js":15,"./cjs/scheduler-tracing.production.min.js":16,"_process":6}],21:[function(require,module,exports){
+module.exports = [ 'the', 'a', 'an', 'some' ]
+
+},{}],22:[function(require,module,exports){
+module.exports = [
+    'as'
+  , 'because'
+  , 'for'
+  , 'and'
+  , 'nor'
+  , 'but'
+  , 'or'
+  , 'yet'
+  , 'so'
+]
+
+},{}],23:[function(require,module,exports){
+module.exports = [
+    'a'
+  , 'abaft'
+  , 'aboard'
+  , 'about'
+  , 'above'
+  , 'absent'
+  , 'across'
+  , 'afore'
+  , 'after'
+  , 'against'
+  , 'along'
+  , 'alongside'
+  , 'amid'
+  , 'amidst'
+  , 'among'
+  , 'amongst'
+  , 'an'
+  , 'apropos'
+  , 'apud'
+  , 'around'
+  , 'as'
+  , 'aside'
+  , 'astride'
+  , 'at'
+  , 'athwart'
+  , 'atop'
+  , 'barring'
+  , 'before'
+  , 'behind'
+  , 'below'
+  , 'beneath'
+  , 'beside'
+  , 'besides'
+  , 'between'
+  , 'beyond'
+  , 'but'
+  , 'by'
+  , 'circa'
+  , 'concerning'
+  , 'despite'
+  , 'down'
+  , 'during'
+  , 'except'
+  , 'excluding'
+  , 'failing'
+  , 'following'
+  , 'for'
+  , 'forenenst'
+  , 'from'
+  , 'given'
+  , 'in'
+  , 'including'
+  , 'inside'
+  , 'into'
+  , 'like'
+  , 'mid'
+  , 'midst'
+  , 'minus'
+  , 'modulo'
+  , 'near'
+  , 'next'
+  , 'notwithstanding'
+  , 'o\''
+  , 'of'
+  , 'off'
+  , 'on'
+  , 'onto'
+  , 'opposite'
+  , 'out'
+  , 'outside'
+  , 'over'
+  , 'pace'
+  , 'past'
+  , 'per'
+  , 'plus'
+  , 'pro'
+  , 'qua'
+  , 'regarding'
+  , 'round'
+  , 'sans'
+  , 'save'
+  , 'since'
+  , 'than'
+  , 'through'
+  , 'throughout'
+  , 'thru'
+  , 'thruout'
+  , 'till'
+  , 'times'
+  , 'to'
+  , 'toward'
+  , 'towards'
+  , 'under'
+  , 'underneath'
+  , 'unlike'
+  , 'until'
+  , 'unto'
+  , 'up'
+  , 'upon'
+  , 'versus'
+  , 'via'
+  , 'vice'
+  , 'vis-à-vis'
+  , 'with'
+  , 'within'
+  , 'without'
+  , 'worth'
+]
+
+},{}],24:[function(require,module,exports){
+/*
+ * To Title Case 2.1 – http://individed.com/code/to-title-case/
+ * Copyright © 2008–2013 David Gouch. Licensed under the MIT License.
+ *
+ * modifications by @rvagg Apr-2014
+ */
+
+//String.prototype.toTitleCase = function(){
+
+
+var smallWords = /^(a|an|and|as|at|but|by|en|for|if|in|nor|of|on|or|per|the|to|vs?\.?|via)$/i;
+
+
+module.exports = function toTitleCase(str){
+  return titleCase(str, smallWords)
+}
+
+
+module.exports.toTitleCase = module.exports
+
+
+var laxWords = require('./articles').concat(require('./prepositions')).concat(require('./conjunctions'))
+      .concat(smallWords.source.replace(/(^\^\(|\)\$$)/g, '').split('|'))
+      .concat(['is']) // a personal preference
+  , laxWordsRe = new RegExp('^(' + laxWords.join('|') + ')$', 'i')
+
+
+module.exports.toLaxTitleCase = function toLaxTitleCase(str){
+  return titleCase(str, laxWordsRe)
+}
+
+
+function titleCase (str, smallWords) {
+  if (!str)
+    return str
+  return str.replace(/[A-Za-z0-9\u00C0-\u00FF]+[^\s-]*/g, function(match, index, title){
+    if (index > 0 && index + match.length !== title.length &&
+      match.search(smallWords) > -1 && title.charAt(index - 2) !== ':' &&
+      (title.charAt(index + match.length) !== '-' || title.charAt(index - 1) === '-') &&
+      title.charAt(index - 1).search(/[^\s-]/) < 0) {
+      return match.toLowerCase();
+    }
+
+    if (match.substr(1).search(/[A-Z]|\../) > -1) {
+      return match;
+    }
+
+    return match.charAt(0).toUpperCase() + match.substr(1);
+  });
+}
+
+},{"./articles":21,"./conjunctions":22,"./prepositions":23}],25:[function(require,module,exports){
 "use strict";
 var __importStar = (this && this.__importStar) || function (mod) {
     if (mod && mod.__esModule) return mod;
@@ -25135,6 +26663,8 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const React = __importStar(require("react"));
 const ReactDOM = __importStar(require("react-dom"));
+const filigree_text_1 = require("filigree-text");
+let range = (n) => [...Array(n).keys()];
 let sLeftHalf = {
     position: 'fixed',
     top: 0,
@@ -25155,7 +26685,7 @@ let sRightHalf = {
 };
 let sTextarea = {
     width: '100%',
-    height: '90%',
+    height: 'calc(100% - 180px)',
     fontFamily: 'monospace',
     background: '#fff',
     borderRadius: 10,
@@ -25170,13 +26700,24 @@ let sOutput = {
     padding: 20,
     borderBottom: '1px solid #ddd',
 };
+let sErr = {
+    position: 'fixed',
+    left: 0,
+    width: '50%',
+    bottom: 0,
+    height: 100,
+    color: 'red',
+    padding: 20,
+};
 class AppView extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            source: 'foo = bar',
+            source: 'name = [joe/susan]\nstart = Hello <name.titlecase>!',
             outputs: [],
-            n: 5,
+            n: 10,
+            rule: 'start',
+            err: null,
         };
     }
     componentDidMount() {
@@ -25188,22 +26729,31 @@ class AppView extends React.Component {
         });
     }
     go() {
-        let outputs = [];
-        for (let ii = 0; ii < this.state.n; ii++) {
-            outputs.push(this.state.source);
-        }
-        this.setState({ outputs: outputs });
+        let fil = new filigree_text_1.Filigree(this.state.source);
+        let outputs = range(this.state.n).map(n => fil.generate(this.state.rule));
+        let err = fil.err === null ? null : fil.err.message;
+        this.setState({
+            outputs: outputs,
+            err: err,
+        });
     }
     render() {
         return React.createElement("div", null,
             React.createElement("div", { style: sLeftHalf },
+                React.createElement("h3", null, "Filigree online editor"),
                 React.createElement("h4", null, "Source"),
+                React.createElement("div", { style: sErr }, this.state.err),
                 React.createElement("textarea", { style: sTextarea, value: this.state.source, onChange: e => this.setSource(e) })),
             React.createElement("div", { style: sRightHalf },
-                React.createElement("h4", null, "Output"),
+                React.createElement("h3", { style: { textAlign: 'right' } },
+                    React.createElement("a", { href: "https://github.com/cinnamon-bun/filigree" }, "GitHub")),
+                React.createElement("h4", null,
+                    "Output of \"",
+                    this.state.rule,
+                    "\" rule"),
                 React.createElement("div", { style: sOutputContainer }, this.state.outputs.map((s, ii) => React.createElement("div", { style: sOutput, key: ii }, s)))));
     }
 }
 ReactDOM.render(React.createElement(AppView, null), document.getElementById('react-slot'));
 
-},{"react":10,"react-dom":7}]},{},[17]);
+},{"filigree-text":1,"react":14,"react-dom":11}]},{},[25]);

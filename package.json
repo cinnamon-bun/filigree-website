@@ -10,5 +10,8 @@
   "license": "ISC",
   "dependencies": {
     "filigree-text": "0.0.14"
+  },
+  "devDependencies": {
+    "typescript": "^3.5.3"
   }
 }

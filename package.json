@@ -4,13 +4,13 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "depgraph": "arkit --exclude build,public -o depgraph.svg",
-    "build": "browserify src/main.tsx -p tsify > public/static/js/bundle.js",
-    "watchify": "watchify src/main.tsx -p tsify --outfile public/static/js/bundle.js -v",
+    "depgraph": "arkit --exclude build,docs -o depgraph.svg",
+    "build": "browserify src/main.tsx -p tsify > docs/static/js/bundle.js",
+    "watchify": "watchify src/main.tsx -p tsify --outfile docs/static/js/bundle.js -v",
     "watch": "onchange -v --initial 'src/*' -- npm run build",
-    "serve": "ecstatic -p 8003 --cache 'no-store' public",
+    "serve": "ecstatic -p 8003 --cache 'no-store' docs",
     "watch-and-serve": "npm run watch & npm run serve",
-    "clean": "rm -f public/static/js/bundle.js build/*",
+    "clean": "rm -f docs/static/js/bundle.js build/*",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",

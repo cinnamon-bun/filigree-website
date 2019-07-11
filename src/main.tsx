@@ -15,7 +15,7 @@ let sLeftHalf : CSSProperties = {
     bottom: 0,
     width: '50%',
     padding: 20,
-    background: '#ddd',
+    background: '#b8dee0',
 }
 let sRightHalf : CSSProperties = {
     position: 'fixed',
@@ -24,7 +24,8 @@ let sRightHalf : CSSProperties = {
     bottom: 0,
     width: '50%',
     padding: 20,
-    background: '#ddd',
+    background: '#c1b5cb',
+    overflowY: 'auto',
 }
 let sTextarea : CSSProperties = {
     width: '100%',
@@ -38,6 +39,7 @@ let sTextarea : CSSProperties = {
 let sOutputContainer : CSSProperties = {
     background: '#fff',
     borderRadius: 10,
+    overflow: 'hidden',
 }
 let sOutput : CSSProperties = {
     padding: 20,

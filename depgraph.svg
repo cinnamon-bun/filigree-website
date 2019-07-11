@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" contentScriptType="application/ecmascript" contentStyleType="text/css" height="169px" preserveAspectRatio="none" style="width:395px;height:169px;" version="1.1" viewBox="0 0 395 169" width="395px" zoomAndPan="magnify"><defs/><g><!--cluster Dependencies--><path d="M25,74 L119,74 A4.5,4.5 0 0 1 122,77 L129,94.4844 L380,94.4844 A3,3 0 0 1 383,97.4844 L383,154 A3,3 0 0 1 380,157 L25,157 A3,3 0 0 1 22,154 L22,77 A3,3 0 0 1 25,74 " fill="#FFFFFF" style="stroke: #000000; stroke-width: 1.5;"/><line style="stroke: #000000; stroke-width: 1.5;" x1="22" x2="129" y1="94.4844" y2="94.4844"/><text fill="#000000" font-family="Tahoma, sans-serif" font-size="12" font-weight="bold" lengthAdjust="spacingAndGlyphs" textLength="94" x="26" y="88.0059">Dependencies</text><!--entity filigree-text--><rect fill="#F8F8F8" height="34.4844" rx="3" ry="3" style="stroke: #383838; stroke-width: 1.0;" width="84" x="38" y="107"/><rect fill="#F8F8F8" height="5" style="stroke: #383838; stroke-width: 1.0;" width="10" x="33" y="112"/><rect fill="#F8F8F8" height="5" style="stroke: #383838; stroke-width: 1.0;" width="10" x="33" y="131.4844"/><text fill="#000000" font-family="Tahoma, sans-serif" font-size="12" lengthAdjust="spacingAndGlyphs" textLength="64" x="48" y="129.0059">filigree-text</text><!--entity prop-types--><rect fill="#F8F8F8" height="34.4844" rx="3" ry="3" style="stroke: #383838; stroke-width: 1.0;" width="82" x="133" y="107"/><rect fill="#F8F8F8" height="5" style="stroke: #383838; stroke-width: 1.0;" width="10" x="128" y="112"/><rect fill="#F8F8F8" height="5" style="stroke: #383838; stroke-width: 1.0;" width="10" x="128" y="131.4844"/><text fill="#000000" font-family="Tahoma, sans-serif" font-size="12" lengthAdjust="spacingAndGlyphs" textLength="62" x="143" y="129.0059">prop-types</text><!--entity react--><rect fill="#F8F8F8" height="34.4844" rx="3" ry="3" style="stroke: #383838; stroke-width: 1.0;" width="49" x="226.5" y="107"/><rect fill="#F8F8F8" height="5" style="stroke: #383838; stroke-width: 1.0;" width="10" x="221.5" y="112"/><rect fill="#F8F8F8" height="5" style="stroke: #383838; stroke-width: 1.0;" width="10" x="221.5" y="131.4844"/><text fill="#000000" font-family="Tahoma, sans-serif" font-size="12" lengthAdjust="spacingAndGlyphs" textLength="29" x="236.5" y="129.0059">react</text><!--entity react-dom--><rect fill="#F8F8F8" height="34.4844" rx="3" ry="3" style="stroke: #383838; stroke-width: 1.0;" width="80" x="287" y="107"/><rect fill="#F8F8F8" height="5" style="stroke: #383838; stroke-width: 1.0;" width="10" x="282" y="112"/><rect fill="#F8F8F8" height="5" style="stroke: #383838; stroke-width: 1.0;" width="10" x="282" y="131.4844"/><text fill="#000000" font-family="Tahoma, sans-serif" font-size="12" lengthAdjust="spacingAndGlyphs" textLength="60" x="297" y="129.0059">react-dom</text><ellipse cx="212.1274" cy="21.242" fill="#F8F8F8" rx="25.6274" ry="13.242" style="stroke: #383838; stroke-width: 0.5;"/><text fill="#000000" font-family="Tahoma, sans-serif" font-size="12" font-weight="bold" lengthAdjust="spacingAndGlyphs" textLength="32" x="196.1274" y="24.9842">main</text><!--link <b>main</b> to filigree-text--><path d="M192.454,29.44 C174.318,36.935 147.165,49.711 127,66 C114.026,76.48 102.1061,91.0195 93.5166,102.7908 " fill="none" id="&lt;b&gt;main&lt;/b&gt;-filigree-text" style="stroke: #000000; stroke-width: 1.0;"/><polygon fill="#000000" points="90.5069,106.9898,99.0013,102.0053,93.4199,102.926,92.4992,97.3446,90.5069,106.9898" style="stroke: #000000; stroke-width: 1.0;"/><!--link <b>main</b> to prop-types--><path d="M207.492,33.983 C201.194,50.721 189.668,81.3572 181.92,101.9504 " fill="none" id="&lt;b&gt;main&lt;/b&gt;-prop-types" style="stroke: #000000; stroke-width: 1.0;"/><polygon fill="#000000" points="180.134,106.6972,187.0476,99.6828,181.8951,102.0176,179.5603,96.8651,180.134,106.6972" style="stroke: #000000; stroke-width: 1.0;"/><!--link <b>main</b> to react--><path d="M216.627,33.983 C223.09,50.721 234.92,81.3572 242.872,101.9504 " fill="none" id="&lt;b&gt;main&lt;/b&gt;-react" style="stroke: #000000; stroke-width: 1.0;"/><polygon fill="#000000" points="244.705,106.6972,245.1944,96.8605,242.9038,102.0329,237.7315,99.7424,244.705,106.6972" style="stroke: #000000; stroke-width: 1.0;"/><!--link <b>main</b> to react-dom--><path d="M228.941,30.757 C243.597,38.791 264.904,51.603 281,66 C293.156,76.8725 304.677,91.157 313.149,102.706 " fill="none" id="&lt;b&gt;main&lt;/b&gt;-react-dom" style="stroke: #000000; stroke-width: 1.0;"/><polygon fill="#000000" points="316.127,106.8258,314.0948,97.1889,313.1972,102.7741,307.612,101.8765,316.127,106.8258" style="stroke: #000000; stroke-width: 1.0;"/><script type="text/plantuml"><![CDATA[
+@startuml
+
+scale max 1920 width
+top to bottom direction
+
+skinparam nodesep 11
+skinparam ranksep 23
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Tahoma
+skinparam defaultFontSize 12
+skinparam roundCorner 6
+skinparam dpi 150
+skinparam arrowColor black
+skinparam arrowThickness 0.5
+skinparam packageTitleAlignment left
+
+skinparam usecase {
+  borderThickness 0.5
+}
+
+skinparam rectangle {
+  borderThickness 0.5
+}
+
+skinparam component {
+  borderThickness 1
+}
+
+
+(<b>main</b>)
+
+package "Dependencies" {
+  [filigree-text]
+  [prop-types]
+  [react]
+  [react-dom]
+}
+
+(<b>main</b>) ---[thickness=1]> [filigree-text]
+(<b>main</b>) ---[thickness=1]> [prop-types]
+(<b>main</b>) ---[thickness=1]> [react]
+(<b>main</b>) ---[thickness=1]> [react-dom]
+
+@enduml
+
+
+' View and edit on https://arkit.pro
+]]></script></g></svg>

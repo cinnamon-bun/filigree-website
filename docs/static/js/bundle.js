@@ -26672,7 +26672,7 @@ let sLeftHalf = {
     bottom: 0,
     width: '50%',
     padding: 20,
-    background: '#ddd',
+    background: '#b8dee0',
 };
 let sRightHalf = {
     position: 'fixed',
@@ -26681,7 +26681,8 @@ let sRightHalf = {
     bottom: 0,
     width: '50%',
     padding: 20,
-    background: '#ddd',
+    background: '#c1b5cb',
+    overflowY: 'auto',
 };
 let sTextarea = {
     width: '100%',
@@ -26695,6 +26696,7 @@ let sTextarea = {
 let sOutputContainer = {
     background: '#fff',
     borderRadius: 10,
+    overflow: 'hidden',
 };
 let sOutput = {
     padding: 20,

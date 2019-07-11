@@ -8,6 +8,9 @@ import { Filigree } from 'filigree-text';
 let range = (n : number) : number[] =>
     [...Array(n).keys()]
 
+let replaceAll = (s : string, orig : string, repl : string) : string =>
+    s.split(orig).join(repl);
+
 let sLeftHalf : CSSProperties = {
     position: 'fixed',
     top: 0,
@@ -62,6 +65,7 @@ interface AppViewState {
     n : number;
     rule : string;
     err : string | null;
+    showWrappers : boolean;
 }
 
 class AppView extends React.Component<AppViewProps, AppViewState> {
@@ -73,20 +77,33 @@ class AppView extends React.Component<AppViewProps, AppViewState> {
             n: 10,
             rule: 'start',
             err: null,
+            showWrappers: false,
         };
     }
     componentDidMount() { 
         this.go();
     }
-    setSource(e : any) {
-        this.setState({source: e.target.value}, () => {
+    setSource(s : string) {
+        this.setState({source: s}, () => {
+            this.go();
+        });
+    }
+    setShowWrappers(val : boolean) {
+        this.setState({showWrappers: val}, () => {
             this.go();
         });
     }
     go() {
         let fil = new Filigree(this.state.source);
+        let plainWrapperFn = (rule : string, text : string) : string =>
+            replaceAll(text, '\\n', '<br>');
+        let decoratedWrapperFn = (rule : string, text : string) : string =>
+            `<div style="padding:10px; display:inline-block; border: 1px solid #08f; border-radius:5px;">
+                <sup style="color:#08f">${rule}</sup>
+                ${replaceAll(text, '\\n', '❡<br>')}
+            </div>`;
         let outputs = range(this.state.n).map(n =>
-            fil.generate(this.state.rule)
+            fil.generate(this.state.rule, this.state.showWrappers ? decoratedWrapperFn : plainWrapperFn)
         );
         let err = fil.err === null ? null : fil.err.message;
         this.setState({
@@ -104,17 +121,30 @@ class AppView extends React.Component<AppViewProps, AppViewState> {
                 </div>
                 <textarea style={sTextarea}
                     value={this.state.source}
-                    onChange={e => this.setSource(e)}
+                    onChange={e => this.setSource(e.target.value)}
                     />
             </div>
             <div style={sRightHalf}>
                 <h3 style={{textAlign: 'right'}}>
                     <a href="https://github.com/cinnamon-bun/filigree">GitHub</a>
                 </h3>
-                <h4>Output of "{this.state.rule}" rule</h4>
+                <h4>
+                    Output of "{this.state.rule}" rule
+                    &nbsp; &nbsp;
+                    <label>
+                        <input type="checkbox"
+                            checked={this.state.showWrappers}
+                            onChange={(e) => this.setShowWrappers(e.target.checked)}
+                            />
+                        Show structure
+                    </label>
+                </h4>
                 <div style={sOutputContainer}>
-                    {this.state.outputs.map((s, ii) =>
-                        <div style={sOutput} key={ii}>{s}</div>
+                    {this.state.outputs.map((output, ii) =>
+                        <div style={sOutput}
+                            key={ii}
+                            dangerouslySetInnerHTML={{__html: output}}
+                            />
                     )}
                 </div>
             </div>

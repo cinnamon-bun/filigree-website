@@ -124,17 +124,21 @@ class Filigree {
     }
     // Generate text from a rule.
     // name is a rule name
-    generate(name) {
+    generate(name, wrapperFn) {
         if (this.rules[name] === undefined) {
             return '<' + name + '>'; // name not found
         }
-        return this._evalFExpr(this.rules[name]);
+        let result = this._evalFExpr(this.rules[name], wrapperFn);
+        if (wrapperFn !== undefined) {
+            result = wrapperFn(name, result);
+        }
+        return result;
     }
     // Evaluate a Filigree expression object
-    _evalFExpr(expr) {
+    _evalFExpr(expr, wrapperFn) {
         let result = '????';
         if (expr.kind == 'seq') {
-            result = expr.children.map(ch => this._evalFExpr(ch)).join('');
+            result = expr.children.map(ch => this._evalFExpr(ch, wrapperFn)).join('');
         }
         else if (expr.kind === 'ref') {
             let x = this.rules[expr.name];
@@ -144,17 +148,20 @@ class Filigree {
             else {
                 // TODO: test for stack overflow
                 // TODO: warn on bad modifier name
-                result = this._evalFExpr(x);
+                result = this._evalFExpr(x, wrapperFn);
                 for (let modName of expr.mods) {
                     let modFn = this.modifiers[modName] || ((x) => x);
                     result = modFn(result);
+                }
+                if (wrapperFn !== undefined) {
+                    result = wrapperFn(expr.name, result);
                 }
             }
         }
         else if (expr.kind == 'choose') {
             // TODO: determinism
             // TODO: move the most recent item to the end of the list of children
-            result = this._evalFExpr(choose(expr.children));
+            result = this._evalFExpr(choose(expr.children), wrapperFn);
         }
         else if (expr.kind === 'literal') {
             result = expr.text;
@@ -26665,6 +26672,7 @@ const React = __importStar(require("react"));
 const ReactDOM = __importStar(require("react-dom"));
 const filigree_text_1 = require("filigree-text");
 let range = (n) => [...Array(n).keys()];
+let replaceAll = (s, orig, repl) => s.split(orig).join(repl);
 let sLeftHalf = {
     position: 'fixed',
     top: 0,
@@ -26720,19 +26728,30 @@ class AppView extends React.Component {
             n: 10,
             rule: 'start',
             err: null,
+            showWrappers: false,
         };
     }
     componentDidMount() {
         this.go();
     }
-    setSource(e) {
-        this.setState({ source: e.target.value }, () => {
+    setSource(s) {
+        this.setState({ source: s }, () => {
+            this.go();
+        });
+    }
+    setShowWrappers(val) {
+        this.setState({ showWrappers: val }, () => {
             this.go();
         });
     }
     go() {
         let fil = new filigree_text_1.Filigree(this.state.source);
-        let outputs = range(this.state.n).map(n => fil.generate(this.state.rule));
+        let plainWrapperFn = (rule, text) => replaceAll(text, '\\n', '<br>');
+        let decoratedWrapperFn = (rule, text) => `<div style="padding:10px; display:inline-block; border: 1px solid #08f; border-radius:5px;">
+                <sup style="color:#08f">${rule}</sup>
+                ${replaceAll(text, '\\n', '❡<br>')}
+            </div>`;
+        let outputs = range(this.state.n).map(n => fil.generate(this.state.rule, this.state.showWrappers ? decoratedWrapperFn : plainWrapperFn));
         let err = fil.err === null ? null : fil.err.message;
         this.setState({
             outputs: outputs,
@@ -26745,15 +26764,18 @@ class AppView extends React.Component {
                 React.createElement("h3", null, "Filigree online editor"),
                 React.createElement("h4", null, "Source"),
                 React.createElement("div", { style: sErr }, this.state.err),
-                React.createElement("textarea", { style: sTextarea, value: this.state.source, onChange: e => this.setSource(e) })),
+                React.createElement("textarea", { style: sTextarea, value: this.state.source, onChange: e => this.setSource(e.target.value) })),
             React.createElement("div", { style: sRightHalf },
                 React.createElement("h3", { style: { textAlign: 'right' } },
                     React.createElement("a", { href: "https://github.com/cinnamon-bun/filigree" }, "GitHub")),
                 React.createElement("h4", null,
                     "Output of \"",
                     this.state.rule,
-                    "\" rule"),
-                React.createElement("div", { style: sOutputContainer }, this.state.outputs.map((s, ii) => React.createElement("div", { style: sOutput, key: ii }, s)))));
+                    "\" rule \u00A0 \u00A0",
+                    React.createElement("label", null,
+                        React.createElement("input", { type: "checkbox", checked: this.state.showWrappers, onChange: (e) => this.setShowWrappers(e.target.checked) }),
+                        "Show structure")),
+                React.createElement("div", { style: sOutputContainer }, this.state.outputs.map((output, ii) => React.createElement("div", { style: sOutput, key: ii, dangerouslySetInnerHTML: { __html: output } })))));
     }
 }
 ReactDOM.render(React.createElement(AppView, null), document.getElementById('react-slot'));

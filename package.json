@@ -15,7 +15,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "filigree-text": "0.0.15",
+    "filigree-text": "0.0.17",
     "react": "^16.8.6",
     "react-dom": "^16.8.6"
   },

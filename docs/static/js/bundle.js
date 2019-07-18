@@ -27757,11 +27757,23 @@ let sButton = {
     borderRadius: 10,
     float: 'right',
 };
+let SOURCE = `
+adjective = [haunted/spooky/mysterious/dark/old]
+institute = [institute/school/college]
+subject = [wizardry/magic/spells/potions]
+schoolName = [
+    <adjective> <institute> of <subject>
+    <institute> of <adjective> <subject>
+    <adjective> <subject> <institute>
+    <adjective> <adjective> <adjective> <institute>
+]
+start = Welcome to the <schoolName.titlecase>
+`.trim();
 class AppView extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            source: 'name = [joe/susan]\nstart = Hello <name.titlecase>!',
+            source: SOURCE,
             outputs: [],
             n: 10,
             rule: 'start',

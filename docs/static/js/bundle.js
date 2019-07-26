@@ -27891,7 +27891,7 @@ class AppView extends React.Component {
         let plainWrapperFn = (rule, text) => replaceAll(replaceAll(text, '<', '&lt;'), '\n', '<br>');
         let decoratedWrapperFn = (rule, text) => `<div style="padding:10px; display:inline-block; border: 1px solid #08f; border-radius:5px;">
                 <sup style="color:#08f">${rule}</sup>
-                ${replaceAll(replaceAll(text, '<', '&lt;'), '\n', '❡<br>')}
+                ${replaceAll(text, '\n', '❡<br>')}
             </div>`;
         let outputs = range(this.state.n).map(n => fil.generate(this.state.rule, this.state.showWrappers ? decoratedWrapperFn : plainWrapperFn));
         let err = fil.err === null ? null : fil.err.message;
@@ -27914,7 +27914,7 @@ class AppView extends React.Component {
                 React.createElement("textarea", { style: sTextarea, value: this.state.source, onChange: e => this.setSource(e.target.value) })),
             React.createElement("div", { style: sRightHalf },
                 React.createElement("h3", { style: { textAlign: 'right' } },
-                    React.createElement("a", { href: "https://github.com/cinnamon-bun/filigree" }, "GitHub")),
+                    React.createElement("a", { href: "https://github.com/cinnamon-bun/filigree" }, "Documentation on GitHub")),
                 React.createElement("h4", null,
                     "Output of \"",
                     this.state.rule,

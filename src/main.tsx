@@ -129,7 +129,7 @@ class AppView extends React.Component<AppViewProps, AppViewState> {
         let decoratedWrapperFn = (rule : string, text : string) : string =>
             `<div style="padding:10px; display:inline-block; border: 1px solid #08f; border-radius:5px;">
                 <sup style="color:#08f">${rule}</sup>
-                ${replaceAll(replaceAll(text, '<', '&lt;'), '\n', '❡<br>')}
+                ${replaceAll(text, '\n', '❡<br>')}
             </div>`;
         let outputs = range(this.state.n).map(n =>
             fil.generate(this.state.rule, this.state.showWrappers ? decoratedWrapperFn : plainWrapperFn)
@@ -166,7 +166,7 @@ class AppView extends React.Component<AppViewProps, AppViewState> {
             </div>
             <div style={sRightHalf}>
                 <h3 style={{textAlign: 'right'}}>
-                    <a href="https://github.com/cinnamon-bun/filigree">GitHub</a>
+                    <a href="https://github.com/cinnamon-bun/filigree">Documentation on GitHub</a>
                 </h3>
                 <h4>
                     Output of "{this.state.rule}" rule

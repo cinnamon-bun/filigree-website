@@ -125,11 +125,11 @@ class AppView extends React.Component<AppViewProps, AppViewState> {
     go() {
         let fil = new Filigree(this.state.source);
         let plainWrapperFn = (rule : string, text : string) : string =>
-            replaceAll(text, '\\n', '<br>');
+            replaceAll(replaceAll(text, '<', '&lt;'), '\n', '<br>');
         let decoratedWrapperFn = (rule : string, text : string) : string =>
             `<div style="padding:10px; display:inline-block; border: 1px solid #08f; border-radius:5px;">
                 <sup style="color:#08f">${rule}</sup>
-                ${replaceAll(text, '\\n', '❡<br>')}
+                ${replaceAll(replaceAll(text, '<', '&lt;'), '\n', '❡<br>')}
             </div>`;
         let outputs = range(this.state.n).map(n =>
             fil.generate(this.state.rule, this.state.showWrappers ? decoratedWrapperFn : plainWrapperFn)

@@ -14,9 +14,9 @@ var __importStar = (this && this.__importStar) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const nearley_1 = __importDefault(require("nearley"));
-const titlecase_1 = __importDefault(require("titlecase"));
 const seedrandom_1 = __importDefault(require("seedrandom"));
 const filigreeGrammar = __importStar(require("./filigreeGrammar"));
+const modifiers_1 = require("./modifiers");
 //--------------------------------------------------------------------------------
 // HELPERS
 // return an array [0, 1, ..., n-1]
@@ -86,6 +86,10 @@ let optimizeExprs = (expr) => {
         expr.children = expr.children.map(optimizeExprs);
     }
     // TODO: if seq has empty literals, remove them
+    // convert two-char "\\n" to actual one-char "\n"
+    if (expr.kind === 'literal') {
+        expr.text = expr.text.split('\\n').join('\n');
+    }
     // if seq or choose has only one child, return that child instead
     if ((expr.kind === 'seq' || expr.kind === 'choose') && expr.children.length === 1) {
         return expr.children[0];
@@ -117,30 +121,6 @@ let shuffleChoices = (expr, rng) => {
         expr.children.forEach(ch => shuffleChoices(ch, rng));
     }
 };
-let makeModifiers = () => ({
-    s: (input) => input + 's',
-    a: (input) => 'a ' + input,
-    ed: (input) => input + 'ed',
-    uppercase: (input) => input.toUpperCase(),
-    lowercase: (input) => input.toLowerCase(),
-    inception: (input) => input.toUpperCase().split('').join(' '),
-    titlecase: (input) => titlecase_1.default(input),
-    trim: (input) => input.trim(),
-    collapseWhitespace: (input) => input,
-    wackycase: (input) => {
-        // "hello" -> "hElLo"
-        let result = [];
-        for (let ii = 0; ii < input.length; ii++) {
-            if (ii % 2 === 0) {
-                result.push(input[ii].toLowerCase());
-            }
-            else {
-                result.push(input[ii].toUpperCase());
-            }
-        }
-        return result.join('');
-    },
-});
 class Filigree {
     // Create a Filigree generator (a set of rules) from a Filigree-language source file.
     // source is a string of rules in Filigree format
@@ -149,7 +129,7 @@ class Filigree {
     constructor(source, seed) {
         this.rules = {};
         this.err = null;
-        this.modifiers = makeModifiers();
+        this.modifiers = modifiers_1.makeModifiers();
         let parser = new nearley_1.default.Parser(nearley_1.default.Grammar.fromCompiled(filigreeGrammar));
         try {
             // add '\n' to ensure a comment on the last line lexes correctly
@@ -215,14 +195,18 @@ class Filigree {
         else if (expr.kind === 'ref') {
             let x = this.rules[expr.name];
             if (x === undefined) {
-                return '<' + expr.name + '>'; // rule name not found
+                // rule name not found
+                return this._toStringFExpr(expr);
             }
             else {
                 // TODO: test for stack overflow
-                // TODO: warn on bad modifier name
                 result = this._evalFExpr(x, wrapperFn);
                 for (let modName of expr.mods) {
-                    let modFn = this.modifiers[modName] || ((x) => x);
+                    let modFn = this.modifiers[modName];
+                    if (modFn === undefined) {
+                        // modifier not found
+                        return this._toStringFExpr(expr);
+                    }
                     result = modFn(result);
                 }
                 if (wrapperFn !== undefined) {
@@ -298,7 +282,7 @@ class Filigree {
 }
 exports.Filigree = Filigree;
 
-},{"./filigreeGrammar":3,"nearley":5,"seedrandom":22,"titlecase":33}],3:[function(require,module,exports){
+},{"./filigreeGrammar":3,"./modifiers":4,"nearley":6,"seedrandom":23}],3:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 // Generated automatically by nearley, version 2.16.0
@@ -457,7 +441,105 @@ exports.ParserRules = [
 ];
 exports.ParserStart = "ruleDecls";
 
-},{"moo":4}],4:[function(require,module,exports){
+},{"moo":5}],4:[function(require,module,exports){
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const titlecase_1 = __importDefault(require("titlecase"));
+// some of this was adapted from or inspired by Tracery's modifiers
+// https://github.com/galaxykate/tracery/blob/master/js/tracery/modifiers.js
+let repeatModUntilNoChange = (input, fn) => {
+    let prev = null;
+    while (prev !== input) {
+        prev = input;
+        input = fn(input);
+    }
+    return input;
+};
+let isVowel = (char) => {
+    char = char.toLowerCase();
+    return char === 'a' || char === 'e' || char === 'i' || char === 'o' || char === 'u';
+};
+let endsWithAny = (input, suffixes) => {
+    // does the string end with any of the suffixes?
+    for (let suf of suffixes) {
+        if (input.endsWith(suf)) {
+            return true;
+        }
+    }
+    return false;
+};
+let endsWithConY = (input) => {
+    // does the string end with a consonant and then a y?
+    if (input.length < 2) {
+        return false;
+    }
+    return (input[input.length - 1] === 'y' && !isVowel(input[input.length - 2]));
+};
+let pluralize = (input) => {
+    // convert a word to its plural form
+    // TODO: match case of the original?
+    if (input === '') {
+        return input;
+    }
+    let i = input.toLowerCase();
+    if (endsWithAny(i, ['s', 'sh', 'ch', 'x', 'z', 'o'])) {
+        return input + 'es';
+    }
+    if (endsWithConY(i)) {
+        return input.slice(0, input.length - 1) + 'ies';
+    }
+    return input + 's';
+};
+exports.makeModifiers = () => ({
+    s: pluralize,
+    a: (input) => {
+        if (input === '') {
+            return input;
+        }
+        if (isVowel(input[0])) {
+            return 'an ' + input;
+        }
+        return 'a ' + input;
+    },
+    trim: (input) => input.trim(),
+    trimleft: (input) => input.trimLeft(),
+    trimright: (input) => input.trimRight(),
+    mergespaces: (input) => {
+        // replace consecutive spaces with one space
+        return repeatModUntilNoChange(input, (input) => {
+            return input.split('  ').join(' ');
+        });
+    },
+    uppercase: (input) => input.toUpperCase(),
+    lowercase: (input) => input.toLowerCase(),
+    titlecase: (input) => titlecase_1.default(input),
+    sentencecase: (input) => {
+        // capitalize first character only
+        if (input === '') {
+            return input;
+        }
+        return input[0].toUpperCase() + input.slice(1);
+    },
+    inception: (input) => input.toUpperCase().split('').join(' '),
+    wackycase: (input) => {
+        // "hello" -> "hElLo"
+        let result = [];
+        for (let ii = 0; ii < input.length; ii++) {
+            if (ii % 2 === 0) {
+                result.push(input[ii].toLowerCase());
+            }
+            else {
+                result.push(input[ii].toUpperCase());
+            }
+        }
+        return result.join('');
+    },
+});
+
+},{"titlecase":34}],5:[function(require,module,exports){
 (function(root, factory) {
   if (typeof define === 'function' && define.amd) {
     define([], factory) /* global define */
@@ -1035,7 +1117,7 @@ exports.ParserStart = "ruleDecls";
 
 }));
 
-},{}],5:[function(require,module,exports){
+},{}],6:[function(require,module,exports){
 (function(root, factory) {
     if (typeof module === 'object' && module.exports) {
         module.exports = factory();
@@ -1427,7 +1509,7 @@ exports.ParserStart = "ruleDecls";
 
 }));
 
-},{}],6:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 /*
 object-assign
 (c) Sindre Sorhus
@@ -1519,7 +1601,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
 	return to;
 };
 
-},{}],7:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 // shim for using process in browser
 var process = module.exports = {};
 
@@ -1705,7 +1787,7 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],8:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 (function (process){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
@@ -1811,7 +1893,7 @@ checkPropTypes.resetWarningCache = function() {
 module.exports = checkPropTypes;
 
 }).call(this,require('_process'))
-},{"./lib/ReactPropTypesSecret":9,"_process":7}],9:[function(require,module,exports){
+},{"./lib/ReactPropTypesSecret":10,"_process":8}],10:[function(require,module,exports){
 /**
  * Copyright (c) 2013-present, Facebook, Inc.
  *
@@ -1825,7 +1907,7 @@ var ReactPropTypesSecret = 'SECRET_DO_NOT_PASS_THIS_OR_YOU_WILL_BE_FIRED';
 
 module.exports = ReactPropTypesSecret;
 
-},{}],10:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 (function (process){
 /** @license React v16.8.6
  * react-dom.development.js
@@ -23107,7 +23189,7 @@ module.exports = reactDom;
 }
 
 }).call(this,require('_process'))
-},{"_process":7,"object-assign":6,"prop-types/checkPropTypes":8,"react":15,"scheduler":20,"scheduler/tracing":21}],11:[function(require,module,exports){
+},{"_process":8,"object-assign":7,"prop-types/checkPropTypes":9,"react":16,"scheduler":21,"scheduler/tracing":22}],12:[function(require,module,exports){
 /** @license React v16.8.6
  * react-dom.production.min.js
  *
@@ -23378,7 +23460,7 @@ x("38"):void 0;return Si(a,b,c,!1,d)},unmountComponentAtNode:function(a){Qi(a)?v
 X;X=!0;try{ki(a)}finally{(X=b)||W||Yh(1073741823,!1)}},__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED:{Events:[Ia,Ja,Ka,Ba.injectEventPluginsByName,pa,Qa,function(a){ya(a,Pa)},Eb,Fb,Dd,Da]}};function Ui(a,b){Qi(a)?void 0:x("299","unstable_createRoot");return new Pi(a,!0,null!=b&&!0===b.hydrate)}
 (function(a){var b=a.findFiberByHostInstance;return Te(n({},a,{overrideProps:null,currentDispatcherRef:Tb.ReactCurrentDispatcher,findHostInstanceByFiber:function(a){a=hd(a);return null===a?null:a.stateNode},findFiberByHostInstance:function(a){return b?b(a):null}}))})({findFiberByHostInstance:Ha,bundleType:0,version:"16.8.6",rendererPackageName:"react-dom"});var Wi={default:Vi},Xi=Wi&&Vi||Wi;module.exports=Xi.default||Xi;
 
-},{"object-assign":6,"react":15,"scheduler":20}],12:[function(require,module,exports){
+},{"object-assign":7,"react":16,"scheduler":21}],13:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -23420,7 +23502,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 }).call(this,require('_process'))
-},{"./cjs/react-dom.development.js":10,"./cjs/react-dom.production.min.js":11,"_process":7}],13:[function(require,module,exports){
+},{"./cjs/react-dom.development.js":11,"./cjs/react-dom.production.min.js":12,"_process":8}],14:[function(require,module,exports){
 (function (process){
 /** @license React v16.8.6
  * react.development.js
@@ -25325,7 +25407,7 @@ module.exports = react;
 }
 
 }).call(this,require('_process'))
-},{"_process":7,"object-assign":6,"prop-types/checkPropTypes":8}],14:[function(require,module,exports){
+},{"_process":8,"object-assign":7,"prop-types/checkPropTypes":9}],15:[function(require,module,exports){
 /** @license React v16.8.6
  * react.production.min.js
  *
@@ -25352,7 +25434,7 @@ b,d){return W().useImperativeHandle(a,b,d)},useDebugValue:function(){},useLayout
 b){void 0!==b.ref&&(h=b.ref,f=J.current);void 0!==b.key&&(g=""+b.key);var l=void 0;a.type&&a.type.defaultProps&&(l=a.type.defaultProps);for(c in b)K.call(b,c)&&!L.hasOwnProperty(c)&&(e[c]=void 0===b[c]&&void 0!==l?l[c]:b[c])}c=arguments.length-2;if(1===c)e.children=d;else if(1<c){l=Array(c);for(var m=0;m<c;m++)l[m]=arguments[m+2];e.children=l}return{$$typeof:p,type:a.type,key:g,ref:h,props:e,_owner:f}},createFactory:function(a){var b=M.bind(null,a);b.type=a;return b},isValidElement:N,version:"16.8.6",
 unstable_ConcurrentMode:x,unstable_Profiler:u,__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED:{ReactCurrentDispatcher:I,ReactCurrentOwner:J,assign:k}},Y={default:X},Z=Y&&X||Y;module.exports=Z.default||Z;
 
-},{"object-assign":6}],15:[function(require,module,exports){
+},{"object-assign":7}],16:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -25363,7 +25445,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 }).call(this,require('_process'))
-},{"./cjs/react.development.js":13,"./cjs/react.production.min.js":14,"_process":7}],16:[function(require,module,exports){
+},{"./cjs/react.development.js":14,"./cjs/react.production.min.js":15,"_process":8}],17:[function(require,module,exports){
 (function (process){
 /** @license React v0.13.6
  * scheduler-tracing.development.js
@@ -25790,7 +25872,7 @@ exports.unstable_unsubscribe = unstable_unsubscribe;
 }
 
 }).call(this,require('_process'))
-},{"_process":7}],17:[function(require,module,exports){
+},{"_process":8}],18:[function(require,module,exports){
 /** @license React v0.13.6
  * scheduler-tracing.production.min.js
  *
@@ -25802,7 +25884,7 @@ exports.unstable_unsubscribe = unstable_unsubscribe;
 
 'use strict';Object.defineProperty(exports,"__esModule",{value:!0});var b=0;exports.__interactionsRef=null;exports.__subscriberRef=null;exports.unstable_clear=function(a){return a()};exports.unstable_getCurrent=function(){return null};exports.unstable_getThreadID=function(){return++b};exports.unstable_trace=function(a,d,c){return c()};exports.unstable_wrap=function(a){return a};exports.unstable_subscribe=function(){};exports.unstable_unsubscribe=function(){};
 
-},{}],18:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
 (function (process,global){
 /** @license React v0.13.6
  * scheduler.development.js
@@ -26505,7 +26587,7 @@ exports.unstable_getFirstCallbackNode = unstable_getFirstCallbackNode;
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"_process":7}],19:[function(require,module,exports){
+},{"_process":8}],20:[function(require,module,exports){
 (function (global){
 /** @license React v0.13.6
  * scheduler.production.min.js
@@ -26530,7 +26612,7 @@ b=c.previous;b.next=c.previous=a;a.next=c;a.previous=b}return a};exports.unstabl
 exports.unstable_shouldYield=function(){return!e&&(null!==d&&d.expirationTime<l||w())};exports.unstable_continueExecution=function(){null!==d&&p()};exports.unstable_pauseExecution=function(){};exports.unstable_getFirstCallbackNode=function(){return d};
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],20:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -26541,7 +26623,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 }).call(this,require('_process'))
-},{"./cjs/scheduler.development.js":18,"./cjs/scheduler.production.min.js":19,"_process":7}],21:[function(require,module,exports){
+},{"./cjs/scheduler.development.js":19,"./cjs/scheduler.production.min.js":20,"_process":8}],22:[function(require,module,exports){
 (function (process){
 'use strict';
 
@@ -26552,7 +26634,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 }).call(this,require('_process'))
-},{"./cjs/scheduler-tracing.development.js":16,"./cjs/scheduler-tracing.production.min.js":17,"_process":7}],22:[function(require,module,exports){
+},{"./cjs/scheduler-tracing.development.js":17,"./cjs/scheduler-tracing.production.min.js":18,"_process":8}],23:[function(require,module,exports){
 // A library of seedable RNGs implemented in Javascript.
 //
 // Usage:
@@ -26614,7 +26696,7 @@ sr.tychei = tychei;
 
 module.exports = sr;
 
-},{"./lib/alea":23,"./lib/tychei":24,"./lib/xor128":25,"./lib/xor4096":26,"./lib/xorshift7":27,"./lib/xorwow":28,"./seedrandom":29}],23:[function(require,module,exports){
+},{"./lib/alea":24,"./lib/tychei":25,"./lib/xor128":26,"./lib/xor4096":27,"./lib/xorshift7":28,"./lib/xorwow":29,"./seedrandom":30}],24:[function(require,module,exports){
 // A port of an algorithm by Johannes Baagøe <baagoe@baagoe.com>, 2010
 // http://baagoe.com/en/RandomMusings/javascript/
 // https://github.com/nquinlan/better-random-numbers-for-javascript-mirror
@@ -26730,7 +26812,7 @@ if (module && module.exports) {
 
 
 
-},{}],24:[function(require,module,exports){
+},{}],25:[function(require,module,exports){
 // A Javascript implementaion of the "Tyche-i" prng algorithm by
 // Samuel Neves and Filipe Araujo.
 // See https://eden.dei.uc.pt/~sneves/pubs/2011-snfa2.pdf
@@ -26835,7 +26917,7 @@ if (module && module.exports) {
 
 
 
-},{}],25:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 // A Javascript implementaion of the "xor128" prng algorithm by
 // George Marsaglia.  See http://www.jstatsoft.org/v08/i14/paper
 
@@ -26918,7 +27000,7 @@ if (module && module.exports) {
 
 
 
-},{}],26:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
 // A Javascript implementaion of Richard Brent's Xorgens xor4096 algorithm.
 //
 // This fast non-cryptographic random number generator is designed for
@@ -27066,7 +27148,7 @@ if (module && module.exports) {
   (typeof define) == 'function' && define   // present with an AMD loader
 );
 
-},{}],27:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 // A Javascript implementaion of the "xorshift7" algorithm by
 // François Panneton and Pierre L'ecuyer:
 // "On the Xorgshift Random Number Generators"
@@ -27165,7 +27247,7 @@ if (module && module.exports) {
 );
 
 
-},{}],28:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 // A Javascript implementaion of the "xorwow" prng algorithm by
 // George Marsaglia.  See http://www.jstatsoft.org/v08/i14/paper
 
@@ -27253,7 +27335,7 @@ if (module && module.exports) {
 
 
 
-},{}],29:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 /*
 Copyright 2014 David Bau.
 
@@ -27508,10 +27590,10 @@ if ((typeof module) == 'object' && module.exports) {
   Math    // math: package containing random, pow, and seedrandom
 );
 
-},{"crypto":1}],30:[function(require,module,exports){
+},{"crypto":1}],31:[function(require,module,exports){
 module.exports = [ 'the', 'a', 'an', 'some' ]
 
-},{}],31:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 module.exports = [
     'as'
   , 'because'
@@ -27524,7 +27606,7 @@ module.exports = [
   , 'so'
 ]
 
-},{}],32:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 module.exports = [
     'a'
   , 'abaft'
@@ -27635,7 +27717,7 @@ module.exports = [
   , 'worth'
 ]
 
-},{}],33:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 /*
  * To Title Case 2.1 – http://individed.com/code/to-title-case/
  * Copyright © 2008–2013 David Gouch. Licensed under the MIT License.
@@ -27687,7 +27769,7 @@ function titleCase (str, smallWords) {
   });
 }
 
-},{"./articles":30,"./conjunctions":31,"./prepositions":32}],34:[function(require,module,exports){
+},{"./articles":31,"./conjunctions":32,"./prepositions":33}],35:[function(require,module,exports){
 "use strict";
 var __importStar = (this && this.__importStar) || function (mod) {
     if (mod && mod.__esModule) return mod;
@@ -27806,10 +27888,10 @@ class AppView extends React.Component {
     }
     go() {
         let fil = new filigree_text_1.Filigree(this.state.source);
-        let plainWrapperFn = (rule, text) => replaceAll(text, '\\n', '<br>');
+        let plainWrapperFn = (rule, text) => replaceAll(replaceAll(text, '<', '&lt;'), '\n', '<br>');
         let decoratedWrapperFn = (rule, text) => `<div style="padding:10px; display:inline-block; border: 1px solid #08f; border-radius:5px;">
                 <sup style="color:#08f">${rule}</sup>
-                ${replaceAll(text, '\\n', '❡<br>')}
+                ${replaceAll(replaceAll(text, '<', '&lt;'), '\n', '❡<br>')}
             </div>`;
         let outputs = range(this.state.n).map(n => fil.generate(this.state.rule, this.state.showWrappers ? decoratedWrapperFn : plainWrapperFn));
         let err = fil.err === null ? null : fil.err.message;
@@ -27845,4 +27927,4 @@ class AppView extends React.Component {
 }
 ReactDOM.render(React.createElement(AppView, null), document.getElementById('react-slot'));
 
-},{"filigree-text":2,"react":15,"react-dom":12}]},{},[34]);
+},{"filigree-text":2,"react":16,"react-dom":13}]},{},[35]);

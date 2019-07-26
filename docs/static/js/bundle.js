@@ -27820,6 +27820,7 @@ let sOutputContainer = {
 let sOutput = {
     padding: 20,
     borderBottom: '1px solid #ddd',
+    whiteSpace: 'pre-line',
 };
 let sErr = {
     position: 'fixed',
@@ -27888,10 +27889,10 @@ class AppView extends React.Component {
     }
     go() {
         let fil = new filigree_text_1.Filigree(this.state.source);
-        let plainWrapperFn = (rule, text) => replaceAll(replaceAll(text, '<', '&lt;'), '\n', '<br>');
-        let decoratedWrapperFn = (rule, text) => `<div style="padding:10px; display:inline-block; border: 1px solid #08f; border-radius:5px;">
+        let plainWrapperFn = (rule, text) => replaceAll(text, '<', '&lt;');
+        let decoratedWrapperFn = (rule, text) => `<div style="padding:10px; display:inline-block; border: 1px solid #08f; border-radius:5px; white-space: normal">
                 <sup style="color:#08f">${rule}</sup>
-                ${replaceAll(text, '\n', '❡<br>')}
+                <div style="white-space: pre-line">${text}</div>
             </div>`;
         let outputs = range(this.state.n).map(n => fil.generate(this.state.rule, this.state.showWrappers ? decoratedWrapperFn : plainWrapperFn));
         let err = fil.err === null ? null : fil.err.message;

@@ -47,6 +47,7 @@ let sOutputContainer : CSSProperties = {
 let sOutput : CSSProperties = {
     padding: 20,
     borderBottom: '1px solid #ddd',
+    whiteSpace: 'pre-line',
 }
 let sErr : CSSProperties = {
     position: 'fixed',
@@ -125,11 +126,11 @@ class AppView extends React.Component<AppViewProps, AppViewState> {
     go() {
         let fil = new Filigree(this.state.source);
         let plainWrapperFn = (rule : string, text : string) : string =>
-            replaceAll(replaceAll(text, '<', '&lt;'), '\n', '<br>');
+            replaceAll(text, '<', '&lt;');
         let decoratedWrapperFn = (rule : string, text : string) : string =>
-            `<div style="padding:10px; display:inline-block; border: 1px solid #08f; border-radius:5px;">
+            `<div style="padding:10px; display:inline-block; border: 1px solid #08f; border-radius:5px; white-space: normal">
                 <sup style="color:#08f">${rule}</sup>
-                ${replaceAll(text, '\n', '❡<br>')}
+                <div style="white-space: pre-line">${text}</div>
             </div>`;
         let outputs = range(this.state.n).map(n =>
             fil.generate(this.state.rule, this.state.showWrappers ? decoratedWrapperFn : plainWrapperFn)

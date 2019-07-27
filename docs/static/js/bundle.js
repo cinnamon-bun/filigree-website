@@ -27841,7 +27841,18 @@ let sButton = {
     float: 'right',
 };
 let SOURCE = `
-adjective = [haunted/spooky/mysterious/dark/old]
+# This is a list of text replacement rules.
+# Use <anglebrackets> to refer to another rule.
+# Use square brackets like [a/b/c] to make a random choice.
+# Random choices can also go on their own lines, in which case there's no "/" between them.
+
+adjective = [
+    haunted
+    spooky
+    mysterious
+    dark
+    old
+]
 institute = [institute/school/college]
 subject = [wizardry/magic/spells/potions]
 schoolName = [
@@ -27850,7 +27861,31 @@ schoolName = [
     <adjective> <subject> <institute>
     <adjective> <adjective> <adjective> <institute>
 ]
-start = Welcome to the <schoolName.titlecase>
+start = Welcome to the <schoolName.titlecase>!
+
+
+
+
+# ".titlecase" is a modifier.  Those only work inside angle brackets.  All the modifiers are:
+# GRAMMAR   
+#   .s      bat -> bats, box -> boxes
+#   .a      box -> a box, apple -> an apple
+# 
+# SPACES          
+#   .trim            " hello " -> "hello"   (remove leading and trailing spaces)
+#   .trimleft        " hello " -> "hello "
+#   .trimright       " hello " -> " hello"
+#   .mergespaces     " a    b " -> " a b "  (combine consecutive spaces into a single space)
+# 
+# CASE    
+#   .uppercase       exAMPLE INput -> EXAMPLE INPUT
+#   .lowercase       exAMPLE INput -> example input
+#   .titlecase       exAMPLE INput -> Example Input  (capitalize first letter of each word)
+#   .sentencecase    exAMPLE INput -> Example INput  (capitalize first character only)
+# 
+# FUN    
+#   .inception     hello -> H E L L O
+#   .wackycase     hello world -> hElLo wOrLd
 `.trim();
 class AppView extends React.Component {
     constructor(props) {

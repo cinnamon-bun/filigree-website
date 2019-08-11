@@ -27782,6 +27782,46 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const React = __importStar(require("react"));
 const ReactDOM = __importStar(require("react-dom"));
 const filigree_text_1 = require("filigree-text");
+//================================================================================
+let SOURCE = `
+# This is a list of text replacement rules
+# like fancy mad-libs.
+
+# <anglebrackets> refer to another rule.
+# [squarebrackets] randomly choose from what's inside them.
+
+start = ✨ Welcome to the <schoolName.titlecase>!  Don't [trip on/fall into/step on] the <spookyPlace>.
+
+schoolName = [
+  <haunted> <institute> of <subject>
+  <institute> of <haunted> <subject>
+  <haunted> <subject> <institute>
+  <haunted> <haunted> <haunted> <institute>
+]
+haunted = [
+  haunted
+  spooky
+  mysterious
+  dark
+  old
+  ancient
+]
+institute = [institute/school/college/academy]
+subject = [wizardry/magic/spells/potions]
+
+spookyPlace = <container> of <horrors>
+
+container = [vat/cauldron/pit/vial/chamber/dimension]
+horrors = [
+  bones ☠️
+  snakes 🐍
+  bubbling goo
+  newts
+  eyeballs 👀
+  bats 
+]
+`.trim();
+//================================================================================
 let range = (n) => [...Array(n).keys()];
 let replaceAll = (s, orig, repl) => s.split(orig).join(repl);
 let sLeftHalf = {
@@ -27818,6 +27858,9 @@ let sOutputContainer = {
     overflow: 'hidden',
 };
 let sOutput = {
+    fontFamily: 'georgia, seriff',
+    fontSize: 20,
+    lineHeight: '1.5em',
     padding: 20,
     borderBottom: '1px solid #ddd',
     whiteSpace: 'pre-line',
@@ -27838,46 +27881,19 @@ let sButton = {
     background: 'white',
     marginLeft: 20,
     borderRadius: 10,
-    float: 'right',
 };
-let SOURCE = `
-# This is a list of text replacement rules.
-
-# Use <anglebrackets> to refer to another rule.
-start = Welcome to the <schoolName.titlecase>!
-
-# Use [squarebrackets] to make a list of random choices.
-# These can have nested <anglebrackets> inside them!
-schoolName = [
-  <haunted> <institute> of <subject>
-  <institute> of <haunted> <subject>
-  <haunted> <subject> <institute>
-  <haunted> <haunted> <haunted> <institute>
-]
-
-haunted = [
-  haunted
-  spooky
-  mysterious
-  dark
-  old
-]
-
-# random choices can also go on a single line, separated by "/"
-institute = [institute/school/college/academy]
-subject = [wizardry/magic/spells/potions]
-`.trim();
 class AppView extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
             source: SOURCE,
             outputs: [],
-            n: 10,
+            n: 20,
             rule: 'start',
             err: null,
             showWrappers: false,
             autoUpdate: true,
+            deterministic: true,
         };
     }
     componentDidMount() {
@@ -27895,6 +27911,11 @@ class AppView extends React.Component {
             this.go();
         });
     }
+    setDeterministic(val) {
+        this.setState({ deterministic: val }, () => {
+            this.go();
+        });
+    }
     setAutoUpdate(val) {
         this.setState({ autoUpdate: val }, () => {
             if (val) {
@@ -27903,7 +27924,8 @@ class AppView extends React.Component {
         });
     }
     go() {
-        let fil = new filigree_text_1.Filigree(this.state.source);
+        let seed = this.state.deterministic ? 'abc' : undefined;
+        let fil = new filigree_text_1.Filigree(this.state.source, seed);
         let plainWrapperFn = (rule, text) => replaceAll(text, '<', '&lt;');
         let decoratedWrapperFn = (rule, text) => `<div style="padding:10px; display:inline-block; border: 1px solid #08f; border-radius:5px; white-space: normal">
                 <sup style="color:#08f">${rule}</sup>
@@ -27921,11 +27943,12 @@ class AppView extends React.Component {
             React.createElement("div", { style: sLeftHalf },
                 React.createElement("h3", null, "Filigree online editor"),
                 React.createElement("h4", null,
-                    "Source \u00A0 \u00A0",
-                    React.createElement("label", { style: { fontWeight: 'normal' } },
-                        React.createElement("input", { type: "checkbox", checked: this.state.autoUpdate, onChange: (e) => this.setAutoUpdate(e.target.checked) }),
-                        "Auto-update"),
-                    React.createElement("button", { style: sButton, type: "button", onClick: () => this.go() }, "Update \u2192")),
+                    "Source code \u00A0 \u00A0",
+                    React.createElement("div", { style: { float: 'right', paddingBottom: 5 } },
+                        React.createElement("label", { style: { fontWeight: 'normal', display: 'inline-block' } },
+                            React.createElement("input", { type: "checkbox", checked: this.state.autoUpdate, onChange: (e) => this.setAutoUpdate(e.target.checked) }),
+                            "Update as you type"),
+                        React.createElement("button", { style: sButton, type: "button", onClick: () => this.go() }, "Update now \u2192"))),
                 React.createElement("div", { style: sErr }, this.state.err),
                 React.createElement("textarea", { style: sTextarea, value: this.state.source, onChange: e => this.setSource(e.target.value) })),
             React.createElement("div", { style: sRightHalf },
@@ -27935,12 +27958,17 @@ class AppView extends React.Component {
                     "Output of \"",
                     this.state.rule,
                     "\" rule \u00A0 \u00A0",
-                    React.createElement("label", { style: { fontWeight: 'normal' } },
+                    React.createElement("label", { style: { fontWeight: 'normal', display: 'inline-block' } },
                         React.createElement("input", { type: "checkbox", checked: this.state.showWrappers, onChange: (e) => this.setShowWrappers(e.target.checked) }),
-                        "Show structure")),
+                        "Show structure"),
+                    "\u00A0 \u00A0",
+                    React.createElement("label", { style: { fontWeight: 'normal', display: 'inline-block' } },
+                        React.createElement("input", { type: "checkbox", checked: !this.state.deterministic, onChange: (e) => this.setDeterministic(!e.target.checked) }),
+                        "Random every time")),
                 React.createElement("div", { style: sOutputContainer }, this.state.outputs.map((output, ii) => React.createElement("div", { style: sOutput, key: ii, dangerouslySetInnerHTML: { __html: output } })))));
     }
 }
+//================================================================================
 ReactDOM.render(React.createElement(AppView, null), document.getElementById('react-slot'));
 
 },{"filigree-text":2,"react":16,"react-dom":13}]},{},[35]);

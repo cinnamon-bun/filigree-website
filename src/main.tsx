@@ -1,9 +1,51 @@
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import { CSSProperties } from 'react';
-import { nominalTypeHack } from 'prop-types';
 
 import { Filigree } from 'filigree-text';
+
+//================================================================================
+
+let SOURCE = `
+# This is a list of text replacement rules
+# like fancy mad-libs.
+
+# <anglebrackets> refer to another rule.
+# [squarebrackets] randomly choose from what's inside them.
+
+start = ✨ Welcome to the <schoolName.titlecase>!  Don't [trip on/fall into/step on] the <spookyPlace>.
+
+schoolName = [
+  <haunted> <institute> of <subject>
+  <institute> of <haunted> <subject>
+  <haunted> <subject> <institute>
+  <haunted> <haunted> <haunted> <institute>
+]
+haunted = [
+  haunted
+  spooky
+  mysterious
+  dark
+  old
+  ancient
+]
+institute = [institute/school/college/academy]
+subject = [wizardry/magic/spells/potions]
+
+spookyPlace = <container> of <horrors>
+
+container = [vat/cauldron/pit/vial/chamber/dimension]
+horrors = [
+  bones ☠️
+  snakes 🐍
+  bubbling goo
+  newts
+  eyeballs 👀
+  bats 
+]
+`.trim();
+
+//================================================================================
 
 let range = (n : number) : number[] =>
     [...Array(n).keys()]
@@ -45,6 +87,9 @@ let sOutputContainer : CSSProperties = {
     overflow: 'hidden',
 }
 let sOutput : CSSProperties = {
+    fontFamily: 'georgia, seriff',
+    fontSize: 20,
+    lineHeight: '1.5em',
     padding: 20,
     borderBottom: '1px solid #ddd',
     whiteSpace: 'pre-line',
@@ -65,8 +110,9 @@ let sButton : CSSProperties = {
     background: 'white',
     marginLeft: 20,
     borderRadius: 10,
-    float: 'right',
 }
+
+//================================================================================
 
 interface AppViewProps extends React.Props<any> { }
 interface AppViewState {
@@ -77,35 +123,8 @@ interface AppViewState {
     err : string | null;
     showWrappers : boolean;
     autoUpdate : boolean;
+    deterministic : boolean;
 }
-
-let SOURCE = `
-# This is a list of text replacement rules.
-
-# Use <anglebrackets> to refer to another rule.
-start = Welcome to the <schoolName.titlecase>!
-
-# Use [squarebrackets] to make a list of random choices.
-# These can have nested <anglebrackets> inside them!
-schoolName = [
-  <haunted> <institute> of <subject>
-  <institute> of <haunted> <subject>
-  <haunted> <subject> <institute>
-  <haunted> <haunted> <haunted> <institute>
-]
-
-haunted = [
-  haunted
-  spooky
-  mysterious
-  dark
-  old
-]
-
-# random choices can also go on a single line, separated by "/"
-institute = [institute/school/college/academy]
-subject = [wizardry/magic/spells/potions]
-`.trim();
 
 class AppView extends React.Component<AppViewProps, AppViewState> {
     constructor(props : AppViewProps) {
@@ -113,11 +132,12 @@ class AppView extends React.Component<AppViewProps, AppViewState> {
         this.state = {
             source: SOURCE,
             outputs: [],
-            n: 10,
+            n: 20,
             rule: 'start',
             err: null,
             showWrappers: false,
             autoUpdate: true,
+            deterministic: true,
         };
     }
     componentDidMount() { 
@@ -133,13 +153,19 @@ class AppView extends React.Component<AppViewProps, AppViewState> {
             this.go();
         });
     }
+    setDeterministic(val : boolean) {
+        this.setState({deterministic: val}, () => {
+            this.go();
+        });
+    }
     setAutoUpdate(val : boolean) {
         this.setState({autoUpdate: val}, () => {
             if (val) { this.go(); }
         });
     }
     go() {
-        let fil = new Filigree(this.state.source);
+        let seed = this.state.deterministic ? 'abc' : undefined;
+        let fil = new Filigree(this.state.source, seed);
         let plainWrapperFn = (rule : string, text : string) : string =>
             replaceAll(text, '<', '&lt;');
         let decoratedWrapperFn = (rule : string, text : string) : string =>
@@ -161,16 +187,18 @@ class AppView extends React.Component<AppViewProps, AppViewState> {
             <div style={sLeftHalf}>
                 <h3>Filigree online editor</h3>
                 <h4>
-                    Source
+                    Source code
                     &nbsp; &nbsp;
-                    <label style={{fontWeight: 'normal'}}>
-                        <input type="checkbox"
-                            checked={this.state.autoUpdate}
-                            onChange={(e) => this.setAutoUpdate(e.target.checked)}
-                            />
-                        Auto-update
-                    </label>
-                    <button style={sButton} type="button" onClick={() => this.go()}>Update &rarr;</button>
+                    <div style={{float: 'right', paddingBottom: 5}}>
+                        <label style={{fontWeight: 'normal', display: 'inline-block'}}>
+                            <input type="checkbox"
+                                checked={this.state.autoUpdate}
+                                onChange={(e) => this.setAutoUpdate(e.target.checked)}
+                                />
+                            Update as you type
+                        </label>
+                        <button style={sButton} type="button" onClick={() => this.go()}>Update now &rarr;</button>
+                    </div>
                 </h4>
                 <div style={sErr}>
                     {this.state.err}
@@ -187,12 +215,20 @@ class AppView extends React.Component<AppViewProps, AppViewState> {
                 <h4>
                     Output of "{this.state.rule}" rule
                     &nbsp; &nbsp;
-                    <label style={{fontWeight: 'normal'}}>
+                    <label style={{fontWeight: 'normal', display: 'inline-block'}}>
                         <input type="checkbox"
                             checked={this.state.showWrappers}
                             onChange={(e) => this.setShowWrappers(e.target.checked)}
                             />
                         Show structure
+                    </label>
+                    &nbsp; &nbsp;
+                    <label style={{fontWeight: 'normal', display: 'inline-block'}}>
+                        <input type="checkbox"
+                            checked={!this.state.deterministic}
+                            onChange={(e) => this.setDeterministic(!e.target.checked)}
+                            />
+                        Random every time
                     </label>
                 </h4>
                 <div style={sOutputContainer}>
@@ -207,6 +243,8 @@ class AppView extends React.Component<AppViewProps, AppViewState> {
         </div>;
     }
 }
+
+//================================================================================
 
 ReactDOM.render(
     <AppView />,

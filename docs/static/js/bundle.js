@@ -27842,50 +27842,30 @@ let sButton = {
 };
 let SOURCE = `
 # This is a list of text replacement rules.
-# Use <anglebrackets> to refer to another rule.
-# Use square brackets like [a/b/c] to make a random choice.
-# Random choices can also go on their own lines, in which case there's no "/" between them.
 
-adjective = [
-    haunted
-    spooky
-    mysterious
-    dark
-    old
-]
-institute = [institute/school/college]
-subject = [wizardry/magic/spells/potions]
-schoolName = [
-    <adjective> <institute> of <subject>
-    <institute> of <adjective> <subject>
-    <adjective> <subject> <institute>
-    <adjective> <adjective> <adjective> <institute>
-]
+# Use <anglebrackets> to refer to another rule.
 start = Welcome to the <schoolName.titlecase>!
 
+# Use [squarebrackets] to make a list of random choices.
+# These can have nested <anglebrackets> inside them!
+schoolName = [
+  <haunted> <institute> of <subject>
+  <institute> of <haunted> <subject>
+  <haunted> <subject> <institute>
+  <haunted> <haunted> <haunted> <institute>
+]
 
+haunted = [
+  haunted
+  spooky
+  mysterious
+  dark
+  old
+]
 
-
-# ".titlecase" is a modifier.  Those only work inside angle brackets.  All the modifiers are:
-# GRAMMAR   
-#   .s      bat -> bats, box -> boxes
-#   .a      box -> a box, apple -> an apple
-# 
-# SPACES          
-#   .trim            " hello " -> "hello"   (remove leading and trailing spaces)
-#   .trimleft        " hello " -> "hello "
-#   .trimright       " hello " -> " hello"
-#   .mergespaces     " a    b " -> " a b "  (combine consecutive spaces into a single space)
-# 
-# CASE    
-#   .uppercase       exAMPLE INput -> EXAMPLE INPUT
-#   .lowercase       exAMPLE INput -> example input
-#   .titlecase       exAMPLE INput -> Example Input  (capitalize first letter of each word)
-#   .sentencecase    exAMPLE INput -> Example INput  (capitalize first character only)
-# 
-# FUN    
-#   .inception     hello -> H E L L O
-#   .wackycase     hello world -> hElLo wOrLd
+# random choices can also go on a single line, separated by "/"
+institute = [institute/school/college/academy]
+subject = [wizardry/magic/spells/potions]
 `.trim();
 class AppView extends React.Component {
     constructor(props) {
